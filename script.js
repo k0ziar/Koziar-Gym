@@ -26,7 +26,6 @@ var expandedExercises = {};
 
 var unlockedKeys = JSON.parse(localStorage.getItem('koziar_unlocked_keys')) || [];
 var hiddenPlans = JSON.parse(localStorage.getItem('koziar_hidden_plans')) || [];
-var subSetData = JSON.parse(localStorage.getItem('koziar_subset_data')) || {};
 
 var defaultPlans = {
     "FBW 3-Dniowy (Domyślny) - by Koziar": {
@@ -55,7 +54,6 @@ function saveAll() {
     localStorage.setItem('koziar_current_plan', currentPlan);
     localStorage.setItem('koziar_checks', JSON.stringify(checks));
     localStorage.setItem('koziar_hidden_plans', JSON.stringify(hiddenPlans));
-    localStorage.setItem('koziar_subset_data', JSON.stringify(subSetData));
 
     syncPlanToCloud(currentPlan);
 }
@@ -131,7 +129,6 @@ async function loadPlansFromCloud() {
     }
 }
 
-// PRZEŁĄCZANIE TRYBÓW
 function toggleViewMode() {
     if (currentMode === 'edit') return;
     currentMode = (currentMode === 'basic') ? 'pro' : 'basic';
@@ -149,14 +146,13 @@ function updateNavButtons() {
     if (lbl) lbl.innerText = currentMode === 'pro' ? 'PRO' : 'BASIC';
 }
 
-// TRWAŁE USUWANIE LOKALNE
 function deleteCurrentPlan() {
     if (currentMode === 'edit') return;
     const p = plans[currentPlan];
     if (!p) return alert("Nie wybrano planu.");
     if (p.isLocked) return alert("Nie możesz usunąć oficjalnego planu domyślnego.");
 
-    if (confirm(`Czy na pewno chcesz usunąć plan "${currentPlan}" lokalnie?\n(Backup pozostanie zachowany w chmurze).`)) {
+    if (confirm(`Czy na pewno chcesz usunąć plan "${currentPlan}" lokalnie?`)) {
         if (!hiddenPlans.includes(currentPlan)) {
             hiddenPlans.push(currentPlan);
         }
@@ -174,11 +170,10 @@ function deleteCurrentPlan() {
 
         initPlanSelect();
         renderGymView();
-        alert("Plan został pomyślnie usunięty lokalnie.");
+        alert("Plan został usunięty.");
     }
 }
 
-// ADMIN / TRENER
 function secretAdminPrompt() {
     const pin = prompt("Wprowadź Kod Dostępu / PIN Trenera:");
     if (pin === ADMIN_PIN) {
@@ -214,7 +209,7 @@ function setPlanAccessKey() {
         saveAll();
         initPlanSelect();
         openExport();
-        alert(`Klucz "${p.accessKey}" został pomyślnie nadany i zapisany!`);
+        alert(`Klucz "${p.accessKey}" został przypisany!`);
     }
 }
 
@@ -225,7 +220,6 @@ function checkAdminBadge() {
     }
 }
 
-// MODALE
 function openImport() {
     if (currentMode === 'edit') return;
     document.getElementById("importModal").classList.add("active");
@@ -274,7 +268,7 @@ function handleImportOrKey() {
         }
         loadPlansFromCloud();
         closeModals();
-        alert("Pobieram plan przypisany do kodu...");
+        alert("Pobieram plan...");
     }
 }
 
@@ -337,7 +331,6 @@ function saveNotes() {
     }
 }
 
-// EDYTOR EXCEL & LOCK NAWIGACJI
 function setMode(mode) {
     currentMode = mode;
     updateNavButtons();
@@ -390,13 +383,8 @@ function initExcel() {
     });
 }
 
-function addExcelRow() {
-    if (hotInstance) hotInstance.alter('insert_row_below');
-}
-
-function addExcelCol() {
-    if (hotInstance) hotInstance.alter('insert_col_right');
-}
+function addExcelRow() { if (hotInstance) hotInstance.alter('insert_row_below'); }
+function addExcelCol() { if (hotInstance) hotInstance.alter('insert_col_right'); }
 
 function saveExcelChanges() {
     if (hotInstance && plans[currentPlan] && !plans[currentPlan].isLocked) {
@@ -411,6 +399,7 @@ function cancelExcelChanges() {
     setMode('basic');
 }
 
+// STRUKTURA PLANU ORAZ HISTORIA I TRWAŁE SERIE
 function parseSheetToStructure() {
     const raw = plans[currentPlan]?.data || [];
     let days = [];
@@ -450,7 +439,8 @@ function parseSheetToStructure() {
                 rowIndex,
                 nr: col0,
                 name: col1,
-                data: rowData
+                data: rowData,
+                rawRow: row
             });
         }
     });
@@ -466,7 +456,7 @@ function parseSheetToStructure() {
     return { days, headers: customHeaders };
 }
 
-function updateCellDirectly(rowIndex, colIndex, value) {
+function ensurePlanEditable() {
     if (plans[currentPlan].isLocked) {
         const copyName = currentPlan.replace(" - by Koziar", "").replace(" (Domyślny)", "") + " (Mój Plan)";
         plans[copyName] = JSON.parse(JSON.stringify(plans[currentPlan]));
@@ -474,16 +464,46 @@ function updateCellDirectly(rowIndex, colIndex, value) {
         currentPlan = copyName;
         initPlanSelect();
     }
+}
 
+function updateCellDirectly(rowIndex, colIndex, value) {
+    ensurePlanEditable();
     plans[currentPlan].data[rowIndex][colIndex] = value;
     saveAll();
     renderGymView();
 }
 
-function updateSubSetCell(key, setIdx, headerName, value) {
-    const subKey = `${key}_s${setIdx}`;
-    if (!subSetData[subKey]) subSetData[subKey] = {};
-    subSetData[subKey][headerName] = value;
+// ZAPISYWANIE SUBSERII DOKŁADNIE W AKRUSZU EXCEL (np. 2.1, 2.2)
+function updateSubSetCellDirectly(parentRowIndex, setIdx, headerName, value) {
+    ensurePlanEditable();
+    const sheetData = plans[currentPlan].data;
+    const parentRow = sheetData[parentRowIndex];
+    const parentNr = parentRow[0];
+    const targetNr = `${parentNr}.${setIdx + 1}`;
+
+    const headers = parseSheetToStructure().headers;
+    const colIdx = headers.find(h => h.name === headerName)?.colIdx;
+    if (colIdx === undefined) return;
+
+    let subRowIndex = -1;
+    for (let i = parentRowIndex + 1; i < sheetData.length; i++) {
+        if (sheetData[i][0] === targetNr) {
+            subRowIndex = i;
+            break;
+        }
+        if (sheetData[i][0] && !String(sheetData[i][0]).includes('.')) break;
+    }
+
+    if (subRowIndex !== -1) {
+        sheetData[subRowIndex][colIdx] = value;
+    } else {
+        let newRow = new Array(parentRow.length).fill("");
+        newRow[0] = targetNr;
+        newRow[1] = `${parentRow[1]} (Seria ${setIdx + 1})`;
+        newRow[colIdx] = value;
+        sheetData.splice(parentRowIndex + 1 + setIdx, 0, newRow);
+    }
+
     saveAll();
 }
 
@@ -508,8 +528,33 @@ function renderGymView() {
 
     const isReadOnlyAttr = p.isLocked ? 'readonly' : '';
 
-    gymView.innerHTML = days.map((day, di) => `
-        <div class="day-card ${day.isRest ? 'rest-day' : ''}">
+    gymView.innerHTML = days.map((day, di) => {
+        let checkedCountInDay = 0;
+        let totalCheckboxesInDay = 0;
+
+        if (!day.isRest) {
+            day.exercises.forEach((ex, ei) => {
+                const key = `${currentPlan}-${di}-${ei}`;
+                totalCheckboxesInDay++;
+                if (checks[key]?.main) checkedCountInDay++;
+
+                const count = parseInt(ex.data['S']?.val || ex.data['s']?.val) || 1;
+                for (let s = 0; s < count; s++) {
+                    totalCheckboxesInDay++;
+                    if (checks[key]?.[`sub_${s}`]) checkedCountInDay++;
+                }
+            });
+        }
+
+        const progressRatio = totalCheckboxesInDay > 0 ? checkedCountInDay / totalCheckboxesInDay : 0;
+        const hasChecks = checkedCountInDay > 0;
+
+        const borderStyle = hasChecks 
+            ? `border-color: rgba(212, 175, 55, ${0.4 + (progressRatio * 0.6)}); box-shadow: 0 0 ${10 + (progressRatio * 20)}px rgba(212, 175, 55, ${0.15 + (progressRatio * 0.45)});` 
+            : '';
+
+        return `
+        <div class="day-card ${day.isRest ? 'rest-day' : ''}" style="${borderStyle}">
             <div class="day-header">
                 <span>${day.name}</span>
                 ${day.isRest ? '<span class="rest-badge">REGENERACJA</span>' : ''}
@@ -527,6 +572,8 @@ function renderGymView() {
                     </div>
 
                     ${day.exercises.map((ex, ei) => {
+                        if (String(ex.nr).includes('.')) return '';
+
                         const key = `${currentPlan}-${di}-${ei}`;
                         const isExpanded = expandedExercises[key];
                         const mainChecked = checks[key]?.main || false;
@@ -562,21 +609,24 @@ function renderGymView() {
 
                             ${(isExpanded && currentMode === 'pro') ? Array.from({length: count}).map((_, s) => {
                                 const subChecked = checks[key]?.[`sub_${s}`] || false;
-                                const subKey = `${key}_s${s}`;
+                                const subNr = `${ex.nr}.${s+1}`;
+
+                                const existingSubRow = plans[currentPlan].data.find(r => r && r[0] === subNr);
+
                                 return `
                                     <div class="row-grid sub-row ${subChecked ? 'done' : ''}">
                                         <div class="col-cell expand-col"></div>
                                         <div class="col-cell check-col">
                                             <input type="checkbox" ${subChecked ? 'checked' : ''} onchange="toggleCheck('${key}', 'sub_${s}', this.checked)">
                                         </div>
-                                        <div class="col-cell nr-col" style="font-size:10px;">${ex.nr}.${s+1}</div>
+                                        <div class="col-cell nr-col" style="font-size:10px;">${subNr}</div>
                                         <div class="col-cell name-col" style="font-size:11px; color:var(--text-dim);">Seria ${s+1}</div>
                                         ${activeHeaders.map(h => {
                                             if (h.name.toUpperCase() === 'S') return `<div class="col-cell" style="color:var(--text-dim);">-</div>`;
-                                            const savedSubVal = subSetData[subKey]?.[h.name] !== undefined ? subSetData[subKey][h.name] : '';
+                                            const subVal = existingSubRow ? (existingSubRow[h.colIdx] || '') : '';
                                             return `
                                                 <div class="col-cell">
-                                                    <input type="text" class="cell-input" value="${savedSubVal}" ${isReadOnlyAttr} placeholder="-" onchange="updateSubSetCell('${key}', ${s}, '${h.name}', this.value)">
+                                                    <input type="text" class="cell-input" value="${subVal}" ${isReadOnlyAttr} placeholder="-" onchange="updateSubSetCellDirectly(${ex.rowIndex}, ${s}, '${h.name}', this.value)">
                                                 </div>
                                             `;
                                         }).join('')}
@@ -586,9 +636,10 @@ function renderGymView() {
                         `;
                     }).join('')}
                 </div>
-            </div>` : '<div style="padding:16px; text-align:center; color:var(--text-dim); font-size:12px; font-weight:700;">Dzień na regenerację 💪</div>'}
+            </div>` : '<div class="rest-day-box"><i data-lucide="coffee"></i><span>Dzień na regenerację i odpoczynek 💪</span></div>'}
         </div>
-    `).join('');
+    `;
+    }).join('');
 
     if (window.lucide) lucide.createIcons();
 }
@@ -624,9 +675,8 @@ function newPlan() {
 
 function resetWeek() {
     if (currentMode === 'edit') return;
-    if (confirm("Resetować zaznaczone serie?")) {
+    if (confirm("Resetować zaznaczone serie i podświetlenia?")) {
         checks = {};
-        subSetData = {};
         saveAll();
         renderGymView();
     }

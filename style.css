@@ -471,3 +471,41 @@ input[type="checkbox"] {
 .btn:hover { border-color: var(--gold); color: var(--gold); }
 .btn-primary { background: var(--gold); color: #000; border: none; font-weight: 900; }
 .btn-primary:hover { background: var(--gold-alt); color: #000; }
+
+/* EFEKT DNI REGENERACJI (REST) */
+.day-card.rest-day {
+    opacity: 0.45;
+    border: 1px dashed var(--border) !important;
+    background: #080808 !important;
+    box-shadow: none !important;
+}
+
+.day-card.rest-day .day-header {
+    background: #0c0c0c;
+    border-bottom: 1px dashed var(--border);
+    color: var(--text-dim);
+}
+
+.rest-day-box {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.rest-day-box i {
+    width: 24px;
+    height: 24px;
+    color: var(--gold);
+    opacity: 0.6;
+}
+
+/* PRZEJŚCIE I GLOW OKIEN DNI Z ZAZNACZONYMI CHECKBOXAMI */
+.day-card {
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
