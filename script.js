@@ -28,11 +28,15 @@ var unlockedKeys = JSON.parse(localStorage.getItem('koziar_unlocked_keys')) || [
 var defaultPlans = {
     "FBW 3-Dniowy (Domyślny) - by Koziar": {
         isLocked: true,
-        notes: "Plan ogólny dostępny dla każdego.",
+        notes: "Gryf długi 20kg\nGryf krótki 15kg\nGryfy łamane 10kg",
         data: [
-            ["Dzień 1 - FBW A", "", "", "", "", "", ""],
+            ["Dzień 1 - PUSH", "", "", "", "", "", ""],
             ["Nr", "Ćwiczenie", "S", "P", "KG", "RIR", "REST"],
-            ["1", "Przysiady ze sztangą na plecach", "4", "8-10", "100", "2", "120s"]
+            ["1", "Ława płaska pauzowana", "5", "3", "115", "1", "120s"],
+            ["2", "Pin Press", "3", "3", "110", "2", "120s"],
+            ["3", "Dipy", "3", "6", "20", "2", "90s"],
+            ["4", "OHP hantlami", "3", "6", "30", "2", "90s"],
+            ["5", "Wznosy wyciąg", "3", "10", "15", "1", "60s"]
         ]
     }
 };
@@ -120,66 +124,67 @@ async function loadPlansFromCloud() {
     }
 }
 
-// PRZEŁĄCZANIE TRYBU BASIC / PRO W JEDNYM PRZYCISKU
+// PRZEŁĄCZANIE TRYBU BASIC / PRO
 function toggleViewMode() {
-    if (currentMode === 'basic') {
+    if (currentMode === 'edit') {
+        currentMode = 'pro';
+    } else if (currentMode === 'basic') {
         currentMode = 'pro';
     } else {
         currentMode = 'basic';
     }
     
-    const btn = document.getElementById('btnToggleMode');
-    if (btn) {
-        btn.innerHTML = currentMode === 'pro' 
-            ? `<i data-lucide="layers"></i> Tryb: PRO` 
-            : `<i data-lucide="check-square"></i> Tryb: BASIC`;
-    }
-
+    updateNavButtons();
     setMode(currentMode);
 }
 
-// SKUTECZNE USUWANIE PLANU
-async function deleteCurrentPlan() {
+function toggleEditMode() {
+    if (currentMode === 'edit') {
+        setMode('basic');
+    } else {
+        setMode('edit');
+    }
+}
+
+function updateNavButtons() {
+    const lbl = document.getElementById('lblToggleMode');
+    if (lbl) lbl.innerText = currentMode === 'pro' ? 'PRO' : 'BASIC';
+    
+    const btnEdit = document.getElementById('btnEditMode');
+    if (btnEdit) {
+        if (currentMode === 'edit') btnEdit.classList.add('active');
+        else btnEdit.classList.remove('active');
+    }
+}
+
+// LOKALNE USUWANIE PLANU (Zostawia backup na bazie Supabase dla trenera/admina)
+function deleteCurrentPlan() {
     const p = plans[currentPlan];
     if (!p) return alert("Nie wybrano planu.");
     if (p.isLocked) return alert("Nie możesz usunąć oficjalnego planu domyślnego.");
 
-    if (confirm(`Czy na pewno chcesz usunąć plan "${currentPlan}"?`)) {
-        // 1. Usunięcie z bazy Supabase
-        if (window.sbClient) {
-            try {
-                const targetDeviceId = p.ownerDeviceId || deviceId;
-                await window.sbClient
-                    .from('user_plans')
-                    .delete()
-                    .eq('user_device_id', targetDeviceId)
-                    .eq('plan_name', currentPlan);
-            } catch (err) {
-                console.error("Błąd bazy danych:", err);
-            }
-        }
-
-        // 2. Czyszczenie klucza dostępu, aby plan nie wracał przy pobieraniu z chmury
+    if (confirm(`Czy na pewno chcesz usunąć plan "${currentPlan}" ze swojego urządzenia?\n(Plan pozostanie zapisany w bazie danych trenera)`)) {
+        // 1. Czyszczenie lokalnych odblokowanych kluczy
         if (p.accessKey) {
             unlockedKeys = unlockedKeys.filter(k => k !== p.accessKey);
             localStorage.setItem('koziar_unlocked_keys', JSON.stringify(unlockedKeys));
         }
 
-        // 3. Usunięcie ze stanu lokalnego
+        // 2. Usunięcie tylko ze stanu lokalnego
         delete plans[currentPlan];
         localStorage.setItem('koziar_plans', JSON.stringify(plans));
 
-        // 4. Przełączenie na plan domyślny
+        // 3. Przełączenie na plan domyślny
         currentPlan = Object.keys(plans)[0];
         localStorage.setItem('koziar_current_plan', currentPlan);
 
         initPlanSelect();
         renderGymView();
-        alert("Plan został pomyślnie usunięty.");
+        alert("Plan został usunięty lokalnie z Twojego telefonu.");
     }
 }
 
-// DYSKRETNE WEJŚCIE W TRYB ADMINA
+// ADMIN / TRENER
 function secretAdminPrompt() {
     const pin = prompt("Wprowadź Kod Dostępu / PIN Trenera:");
     if (pin === ADMIN_PIN) {
@@ -188,7 +193,6 @@ function secretAdminPrompt() {
         alert("Zalogowano w trybie TRENERA!");
         location.reload();
     } else if (pin) {
-        // Jeśli wpisano jakikolwiek inny ciąg znaków, traktujemy go jako Klucz Planu!
         unlockedKeys.push(pin.trim());
         localStorage.setItem('koziar_unlocked_keys', JSON.stringify(unlockedKeys));
         loadPlansFromCloud();
@@ -197,11 +201,13 @@ function secretAdminPrompt() {
 }
 
 function logoutAdmin() {
-    isAdmin = false;
-    localStorage.setItem('koziar_is_admin', 'false');
-    localStorage.removeItem('koziar_plans');
-    alert("Wylogowano z trybu Trenera.");
-    location.reload();
+    if (confirm("Czy chcesz wyjść z trybu Trenera?")) {
+        isAdmin = false;
+        localStorage.setItem('koziar_is_admin', 'false');
+        localStorage.removeItem('koziar_plans');
+        alert("Wylogowano z trybu Trenera.");
+        location.reload();
+    }
 }
 
 function setPlanAccessKey() {
@@ -218,9 +224,20 @@ function setPlanAccessKey() {
     }
 }
 
-// POLĄCZONY MODAL IMPORTU / KODÓW
+function checkAdminBadge() {
+    const badge = document.getElementById("adminBadge");
+    if (badge) {
+        badge.style.display = isAdmin ? "flex" : "none";
+    }
+}
+
+// MODALE IMPORT / EKSPORT / SOCIALS
 function openImport() {
     document.getElementById("importModal").classList.add("active");
+}
+
+function openSocialModal() {
+    document.getElementById("socialModal").classList.add("active");
 }
 
 function handleImportOrKey() {
@@ -233,7 +250,6 @@ function handleImportOrKey() {
         return;
     }
 
-    // Sprawdzamy czy to kod czy wklejony tekst TSV
     if (val.includes("\t") || val.includes("\n")) {
         const lines = val.split("\n");
         let notes = "";
@@ -257,7 +273,6 @@ function handleImportOrKey() {
             renderGymView();
         }
     } else {
-        // Traktuj jako kod dostępu
         if (!unlockedKeys.includes(val)) {
             unlockedKeys.push(val);
             localStorage.setItem('koziar_unlocked_keys', JSON.stringify(unlockedKeys));
@@ -268,7 +283,6 @@ function handleImportOrKey() {
     }
 }
 
-// POŁĄCZONY MODAL EKSPORTU I KODU NADAWANIA
 function openExport() {
     const p = plans[currentPlan];
     let lines = [`!!NOTES!!\t${(p.notes || "").replace(/\n/g, "[BR]")}`];
@@ -281,10 +295,13 @@ function openExport() {
         keyInfo.innerText = p.accessKey ? `Klucz dostępu planu: ${p.accessKey}` : "Brak przypisanego klucza dostępu.";
     }
 
+    const btnSetKey = document.getElementById("btnSetKey");
+    if (btnSetKey) btnSetKey.style.display = isAdmin ? "inline-block" : "none";
+
     document.getElementById("exportModal").classList.add("active");
 }
 
-// RENDEROWANIE I INTERFEJS
+// RENDEROWANIE I PEŁNA EDYCYJNOŚĆ TABELI EXCEL
 function initPlanSelect() {
     const select = document.getElementById("planSelect");
     if (!select) return;
@@ -307,6 +324,8 @@ function initPlanSelect() {
 
     if (!plans[currentPlan]) currentPlan = Object.keys(plans)[0];
     select.value = currentPlan;
+
+    checkAdminBadge();
 }
 
 function loadPlan() {
@@ -315,8 +334,18 @@ function loadPlan() {
     renderGymView();
 }
 
+function saveNotes() {
+    const el = document.getElementById("planNotes");
+    if (el && plans[currentPlan] && !plans[currentPlan].isLocked) {
+        plans[currentPlan].notes = el.value;
+        saveAll();
+    }
+}
+
 function setMode(mode) {
     currentMode = mode;
+    updateNavButtons();
+
     const gymView = document.getElementById('gymView');
     const editArea = document.getElementById('editArea');
 
@@ -343,15 +372,25 @@ function initExcel() {
         data: JSON.parse(JSON.stringify(p.data)),
         rowHeaders: true,
         colHeaders: true,
-        height: '60vh',
+        height: '100%',
         licenseKey: 'non-commercial-and-evaluation',
         contextMenu: true,
+        minSpareRows: 1,
+        minSpareCols: 1,
         manualColumnResize: true,
         manualRowResize: true,
         stretchH: 'all',
         readOnly: p.isLocked,
         afterChange: () => saveSheetData()
     });
+}
+
+function addExcelRow() {
+    if (hotInstance) hotInstance.alter('insert_row_below');
+}
+
+function addExcelCol() {
+    if (hotInstance) hotInstance.alter('insert_col_right');
 }
 
 function saveSheetData() {
@@ -439,9 +478,6 @@ function renderGymView() {
         notesEl.value = p.notes || "";
         notesEl.readOnly = p.isLocked;
     }
-
-    const lockedFooter = document.getElementById("lockedFooter");
-    if (lockedFooter) lockedFooter.style.display = p.isLocked ? "block" : "none";
 
     const gymView = document.getElementById('gymView');
     if (!gymView) return;
@@ -531,7 +567,7 @@ function renderGymView() {
                         `;
                     }).join('')}
                 </div>
-            </div>` : '<div style="padding:16px; text-align:center; color:var(--text-dim); font-size:12px; font-weight:600;">Dzień na regenerację 💪</div>'}
+            </div>` : '<div style="padding:16px; text-align:center; color:var(--text-dim); font-size:12px; font-weight:700;">Dzień na regenerację 💪</div>'}
         </div>
     `).join('');
 
@@ -556,7 +592,7 @@ function newPlan() {
             data: [
                 ["Dzień 1 - Trening A", "", "", "", "", ""],
                 ["Nr", "Ćwiczenie", "S", "P", "KG", "REST"],
-                ["1", "Nowe Ćwiczenie", "3", "10", "50", "90s"]
+                ["1", "Wyciskanie leżąc", "3", "10", "60", "90s"]
             ]
         };
         currentPlan = name;
@@ -595,10 +631,4 @@ document.addEventListener("DOMContentLoaded", () => {
     initPlanSelect();
     renderGymView();
     loadPlansFromCloud();
-    
-    // Obsługa ukrytego wejścia w Admina (Kliknięcie logo w nagłówku)
-    const logoHeader = document.querySelector('.app-header h1, .brand-logo');
-    if (logoHeader) {
-        logoHeader.addEventListener('click', secretAdminPrompt);
-    }
 });
