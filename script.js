@@ -11,7 +11,7 @@ if (typeof window.sbClient === 'undefined') {
 }
 
 // USTAWIENIA ADMINA / KODÓW
-const ADMIN_PIN = "0000"; // Tajny PIN Trenera
+const ADMIN_PIN = "0000";
 var isAdmin = localStorage.getItem('koziar_is_admin') === 'true';
 
 var deviceId = localStorage.getItem('koziar_device_id');
@@ -45,7 +45,6 @@ var checks = JSON.parse(localStorage.getItem('koziar_checks')) || {};
 
 // ZAPIS LOKALNY I W CHMURZE
 function saveAll() {
-    // W trybie Admina NIE zapisujemy planów innych osób do stałego localStorage zwykłego usera
     if (!isAdmin) {
         localStorage.setItem('koziar_plans', JSON.stringify(plans));
     }
@@ -78,13 +77,12 @@ async function syncPlanToCloud(planName) {
             .upsert(payload, { onConflict: 'user_device_id, plan_name' });
 
         if (error) console.error("Błąd zapisu w Supabase:", error.message);
-        else console.log(`Plan "${planName}" pomyślnie zsynchronizowany.`);
     } catch (err) {
         console.warn("Brak połączenia z chmurą.");
     }
 }
 
-// POBIERANIE PLANÓW W ZALEŻNOŚCI OD UPRAWNIEŃ
+// POBIERANIE PLANÓW
 async function loadPlansFromCloud() {
     if (!window.sbClient) return;
     try {
@@ -101,7 +99,6 @@ async function loadPlansFromCloud() {
         const { data, error } = await query;
 
         if (!error && data && data.length > 0) {
-            // Czyścimy obecną listę dynamicznych planów przed załadowaniem z bazy
             let loadedPlans = JSON.parse(JSON.stringify(defaultPlans));
 
             data.forEach(row => {
@@ -129,14 +126,62 @@ async function loadPlansFromCloud() {
     }
 }
 
+// FUNKCJA USUWANIA PLANU (LOKALNIE LUB Z BAZY)
+async function deleteCurrentPlan() {
+    const p = plans[currentPlan];
+    if (!p) return alert("Nie wybrano planu.");
+    if (p.isLocked) return alert("Nie możesz usunąć oficjalnego planu domyślnego.");
+
+    const confirmMsg = isAdmin 
+        ? `Czy chcesz usunąć plan "${currentPlan}"?\n\n[OK] = Usuń trwale z BAZY DANYCH (Supabase)\n[Anuluj] = Przerwij`
+        : `Czy na pewno chcesz usunąć plan "${currentPlan}" ze swojej listy?`;
+
+    if (confirm(confirmMsg)) {
+        // 1. Jeśli jesteśmy Trenerem - kasujemy również rekord z Supabase
+        if (isAdmin && window.sbClient) {
+            try {
+                const targetDeviceId = p.ownerDeviceId || deviceId;
+                const { error } = await window.sbClient
+                    .from('user_plans')
+                    .delete()
+                    .eq('user_device_id', targetDeviceId)
+                    .eq('plan_name', currentPlan);
+
+                if (error) alert("Błąd podczas usuwania z bazy: " + error.message);
+                else alert("Plan został trwale usunięty z bazy Supabase!");
+            } catch (err) {
+                console.error("Błąd połączenia podczas usuwania z bazy.");
+            }
+        }
+
+        // 2. Jeśli plan miał klucz dostępu, usuwamy klucz z lokalnej pamięci użytkownika
+        if (p.accessKey) {
+            unlockedKeys = unlockedKeys.filter(k => k !== p.accessKey);
+            localStorage.setItem('koziar_unlocked_keys', JSON.stringify(unlockedKeys));
+        }
+
+        // 3. Usuwamy plan ze stanu aplikacji
+        delete plans[currentPlan];
+
+        // 4. Czyścimy lokalny zapis
+        localStorage.setItem('koziar_plans', JSON.stringify(plans));
+
+        // 5. Przełączamy na pierwszy dostępny plan
+        currentPlan = Object.keys(plans)[0];
+        localStorage.setItem('koziar_current_plan', currentPlan);
+
+        initPlanSelect();
+        renderGymView();
+    }
+}
+
 // LOGIKA ADMINA I KLUCZY
 function toggleAdminMode() {
     if (isAdmin) {
         isAdmin = false;
         localStorage.setItem('koziar_is_admin', 'false');
-        // Resetujemy zapisane lokalnie plany do domyślnych, aby czyściło plany podopiecznych!
         localStorage.removeItem('koziar_plans');
-        alert("Wylogowano z trybu Trenera. Przywracanie widoku użytkownika...");
+        alert("Wylogowano z trybu Trenera.");
         location.reload();
     } else {
         const pin = prompt("Wprowadź PIN Trenera:");
@@ -165,14 +210,10 @@ function unlockPlanWithKey() {
 }
 
 function setPlanAccessKey() {
-    if (!isAdmin) {
-        alert("Tylko Trener może nadawać kody dostępu! Zaloguj się przyciskiem TRENER.");
-        return;
-    }
+    if (!isAdmin) return alert("Tylko Trener może nadawać kody dostępu!");
     
     const p = plans[currentPlan];
-    if (!p) return alert("Wybierz najpierw plan!");
-    if (p.isLocked) return alert("Nie możesz ustawić klucza dla oficjalnego planu domyślnego.");
+    if (!p || p.isLocked) return alert("Wybierz własny plan (nie domyślny).");
 
     const currentKey = p.accessKey || "";
     const key = prompt(`Ustaw Klucz Dostępu dla planu "${currentPlan}":`, currentKey);
@@ -185,7 +226,7 @@ function setPlanAccessKey() {
     }
 }
 
-// INTERFEJS I LOGIKA WIDOKU
+// INTERFEJS
 function initPlanSelect() {
     const select = document.getElementById("planSelect");
     if (!select) return;
