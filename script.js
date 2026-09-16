@@ -30,7 +30,7 @@ var hiddenPlans = JSON.parse(localStorage.getItem('koziar_hidden_plans')) || [];
 var defaultPlans = {
     "FBW 3-Dniowy (Domyślny) - by Koziar": {
         isLocked: true,
-        notes: "Gryf długi 20kg\nGryf krótki 15kg\nGryfy łamane 10kg",
+        notes: "Gryf długi 20kg\nGryf krótki 15kg\nGryfy łamane 10kg\n\nPo zmianie prostego chwytu na warkocz w tricepsie, wyniki drastycznie skoczyły w górę\nPrzysiad na smithie 170x2 nie pełny zakres\nMartwy 190x1 PR - technika do poprawy",
         data: [
             ["Dzień 1 - PUSH", "", "", "", "", "", ""],
             ["Nr", "Ćwiczenie", "S", "P", "KG", "RIR", "REST"],
@@ -399,7 +399,7 @@ function cancelExcelChanges() {
     setMode('basic');
 }
 
-// STRUKTURA PLANU ORAZ HISTORIA I TRWAŁE SERIE
+// STRUKTURA PLANU (OBSŁUGA REST I NAGŁÓWKÓW)
 function parseSheetToStructure() {
     const raw = plans[currentPlan]?.data || [];
     let days = [];
@@ -422,9 +422,15 @@ function parseSheetToStructure() {
             return;
         }
 
+        const isRestWord = (str) => {
+            const s = str.toLowerCase();
+            return s.includes('rest') || s.includes('wolne') || s.includes('pauza') || s.includes('regeneracja');
+        };
+
         if (col0.toLowerCase().startsWith('dzień') || (col0 && !col1 && isNaN(col0))) {
-            const isRest = col0.toLowerCase().includes('rest') || col0.toLowerCase().includes('wolne') || col0.toLowerCase().includes('pauza');
-            currentDay = { name: col0, isRest, exercises: [] };
+            const isRest = isRestWord(col0) || isRestWord(col1);
+            const fullDayTitle = col1 ? `${col0} - ${col1}` : col0;
+            currentDay = { name: fullDayTitle, isRest, exercises: [] };
             days.push(currentDay);
         } else if (currentDay && (col0 !== '' || col1 !== '')) {
             let rowData = {};
@@ -469,11 +475,51 @@ function ensurePlanEditable() {
 function updateCellDirectly(rowIndex, colIndex, value) {
     ensurePlanEditable();
     plans[currentPlan].data[rowIndex][colIndex] = value;
+
+    if (colIndex === 0) {
+        reorderExercisesInDay(rowIndex, value);
+    }
+
     saveAll();
     renderGymView();
 }
 
-// ZAPISYWANIE SUBSERII DOKŁADNIE W AKRUSZU EXCEL (np. 2.1, 2.2)
+// AUTOMATYCZNE SORTOWANIE
+function reorderExercisesInDay(targetRowIdx, newNrVal) {
+    const sheetData = plans[currentPlan].data;
+    const targetNr = parseFloat(newNrVal);
+    if (isNaN(targetNr)) return;
+
+    let dayStart = targetRowIdx;
+    while (dayStart > 0 && !String(sheetData[dayStart][0]).toLowerCase().startsWith('dzień')) {
+        dayStart--;
+    }
+
+    let dayEnd = targetRowIdx;
+    while (dayEnd < sheetData.length - 1 && !String(sheetData[dayEnd + 1][0]).toLowerCase().startsWith('dzień')) {
+        dayEnd++;
+    }
+
+    let exRows = [];
+    for (let i = dayStart; i <= dayEnd; i++) {
+        const nr = parseFloat(sheetData[i][0]);
+        if (!isNaN(nr)) {
+            exRows.push(sheetData[i]);
+        }
+    }
+
+    exRows.sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
+
+    let exCounter = 0;
+    for (let i = dayStart; i <= dayEnd; i++) {
+        const isExRow = !isNaN(parseFloat(sheetData[i][0]));
+        if (isExRow && exRows[exCounter]) {
+            sheetData[i] = exRows[exCounter];
+            exCounter++;
+        }
+    }
+}
+
 function updateSubSetCellDirectly(parentRowIndex, setIdx, headerName, value) {
     ensurePlanEditable();
     const sheetData = plans[currentPlan].data;
@@ -507,6 +553,31 @@ function updateSubSetCellDirectly(parentRowIndex, setIdx, headerName, value) {
     saveAll();
 }
 
+// POWIĄZANIA CHECKBOXÓW
+function toggleCheck(key, target, value, totalSubSets = 0) {
+    if (!checks[key]) checks[key] = {};
+
+    if (target === 'main') {
+        checks[key].main = value;
+        for (let s = 0; s < totalSubSets; s++) {
+            checks[key][`sub_${s}`] = value;
+        }
+    } else if (target.startsWith('sub_')) {
+        checks[key][target] = value;
+        let allSubsChecked = true;
+        for (let s = 0; s < totalSubSets; s++) {
+            if (!checks[key][`sub_${s}`]) {
+                allSubsChecked = false;
+                break;
+            }
+        }
+        checks[key].main = allSubsChecked;
+    }
+
+    saveAll();
+    renderGymView();
+}
+
 function renderGymView() {
     const p = plans[currentPlan];
     if (!p) return;
@@ -529,32 +600,22 @@ function renderGymView() {
     const isReadOnlyAttr = p.isLocked ? 'readonly' : '';
 
     gymView.innerHTML = days.map((day, di) => {
-        let checkedCountInDay = 0;
-        let totalCheckboxesInDay = 0;
+        let hasAnyCheckedInDay = false;
 
         if (!day.isRest) {
             day.exercises.forEach((ex, ei) => {
                 const key = `${currentPlan}-${di}-${ei}`;
-                totalCheckboxesInDay++;
-                if (checks[key]?.main) checkedCountInDay++;
-
+                if (checks[key]?.main) hasAnyCheckedInDay = true;
+                
                 const count = parseInt(ex.data['S']?.val || ex.data['s']?.val) || 1;
                 for (let s = 0; s < count; s++) {
-                    totalCheckboxesInDay++;
-                    if (checks[key]?.[`sub_${s}`]) checkedCountInDay++;
+                    if (checks[key]?.[`sub_${s}`]) hasAnyCheckedInDay = true;
                 }
             });
         }
 
-        const progressRatio = totalCheckboxesInDay > 0 ? checkedCountInDay / totalCheckboxesInDay : 0;
-        const hasChecks = checkedCountInDay > 0;
-
-        const borderStyle = hasChecks 
-            ? `border-color: rgba(212, 175, 55, ${0.4 + (progressRatio * 0.6)}); box-shadow: 0 0 ${10 + (progressRatio * 20)}px rgba(212, 175, 55, ${0.15 + (progressRatio * 0.45)});` 
-            : '';
-
         return `
-        <div class="day-card ${day.isRest ? 'rest-day' : ''}" style="${borderStyle}">
+        <div class="day-card ${day.isRest ? 'rest-day' : ''} ${hasAnyCheckedInDay ? 'active-day' : ''}">
             <div class="day-header">
                 <span>${day.name}</span>
                 ${day.isRest ? '<span class="rest-badge">REGENERACJA</span>' : ''}
@@ -589,7 +650,7 @@ function renderGymView() {
                                 </div>` : ''}
                                 
                                 <div class="col-cell check-col">
-                                    <input type="checkbox" ${mainChecked ? 'checked' : ''} onchange="toggleCheck('${key}', 'main', this.checked)">
+                                    <input type="checkbox" ${mainChecked ? 'checked' : ''} onchange="toggleCheck('${key}', 'main', this.checked, ${count})">
                                 </div>
                                 <div class="col-cell nr-col">
                                     <input type="text" class="cell-input" value="${ex.nr}" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex}, 0, this.value)">
@@ -617,7 +678,7 @@ function renderGymView() {
                                     <div class="row-grid sub-row ${subChecked ? 'done' : ''}">
                                         <div class="col-cell expand-col"></div>
                                         <div class="col-cell check-col">
-                                            <input type="checkbox" ${subChecked ? 'checked' : ''} onchange="toggleCheck('${key}', 'sub_${s}', this.checked)">
+                                            <input type="checkbox" ${subChecked ? 'checked' : ''} onchange="toggleCheck('${key}', 'sub_${s}', this.checked, ${count})">
                                         </div>
                                         <div class="col-cell nr-col" style="font-size:10px;">${subNr}</div>
                                         <div class="col-cell name-col" style="font-size:11px; color:var(--text-dim);">Seria ${s+1}</div>
@@ -645,12 +706,6 @@ function renderGymView() {
 }
 
 function toggleExpand(key) { expandedExercises[key] = !expandedExercises[key]; renderGymView(); }
-function toggleCheck(key, target, value) {
-    if (!checks[key]) checks[key] = {};
-    checks[key][target] = value;
-    saveAll();
-    renderGymView();
-}
 
 function newPlan() {
     if (currentMode === 'edit') return;

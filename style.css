@@ -148,13 +148,40 @@ main {
 
 /* --- KARTY DNI TRENINGOWYCH --- */
 .day-card {
-    background: #0f0f0f; 
-    border: 1.5px solid var(--border-gold);
-    border-radius: 18px; 
-    margin-bottom: 22px; 
+    background: #111111;
+    border: 1px solid #282828;
+    border-radius: 8px;
+    margin-bottom: 20px;
     overflow: hidden;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.6), 0 0 15px rgba(212, 175, 55, 0.08);
+    transition: all 0.25s ease-in-out;
 }
+
+.day-card .day-header {
+    background: #161616;
+    padding: 12px 16px;
+    font-weight: 800;
+    font-size: 14px;
+    color: #e0e0e0;
+    letter-spacing: 0.5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #222;
+}
+
+/* AKTYWNY DZIEŃ - ODWZOROWANY ZE ZRZUTU EKRANU */
+.day-card.active-day {
+    border: 1.5px solid #ffd700 !important;
+    box-shadow: 0 0 14px rgba(255, 215, 0, 0.18), inset 0 0 10px rgba(255, 215, 0, 0.03);
+}
+
+.day-card.active-day .day-header {
+    background: linear-gradient(90deg, #221e10 0%, #161616 100%);
+    color: #ffd700;
+    border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+
 
 .day-card.rest-day {
     opacity: 0.6;
@@ -249,13 +276,13 @@ main {
     background: rgba(212, 175, 55, 0.1); 
 }
 
-/* ZAZNACZONE WIERSZE */
-.row-grid.done { 
-    background: rgba(212, 175, 55, 0.04) !important; 
+/* PRZEKREŚLONE / ZROBIONE WIERSZE */
+.row-grid.done {
+    background: rgba(255, 215, 0, 0.06);
 }
-.row-grid.done .cell-input, .row-grid.done .col-cell {
-    color: #927e3e !important; 
-    text-decoration: line-through;
+
+.row-grid.done .cell-input {
+    color: #ffd700;
 }
 
 input[type="checkbox"] {
@@ -474,9 +501,9 @@ input[type="checkbox"] {
 
 /* EFEKT DNI REGENERACJI (REST) */
 .day-card.rest-day {
-    opacity: 0.45;
-    border: 1px dashed var(--border) !important;
-    background: #080808 !important;
+    opacity: 0.4;
+    border: 1px dashed #333 !important;
+    background: #0a0a0a !important;
     box-shadow: none !important;
 }
 
@@ -489,9 +516,9 @@ input[type="checkbox"] {
 .rest-day-box {
     padding: 24px 16px;
     text-align: center;
-    color: var(--text-dim);
+    color: #888;
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 600;
     display: flex;
     flex-direction: column;
     align-items: center;
