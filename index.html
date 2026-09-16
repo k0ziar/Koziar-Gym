@@ -32,7 +32,7 @@
     <!-- KONTENER GŁÓWNY -->
     <main>
         <!-- NOTATKI -->
-        <div class="notes-area">
+        <div class="notes-area" id="notesContainer">
             <label>NOTATKI DO PLANU</label>
             <textarea id="planNotes" placeholder="Treść notatek..." onchange="saveNotes()"></textarea>
         </div>
@@ -43,21 +43,22 @@
         <!-- EDYTOR EXCEL (FULL TABELA) -->
         <div id="editArea" style="display:none;">
             <div class="excel-toolbar">
-                <button class="btn btn-sm" onclick="addExcelRow()">+ Dodaj Wiersz</button>
-                <button class="btn btn-sm" onclick="addExcelCol()">+ Dodaj Kolumnę</button>
-                <button class="btn btn-sm btn-primary" onclick="setMode(currentMode === 'edit' ? 'basic' : currentMode)">Zapisz i Zamknij</button>
+                <button class="btn btn-sm" onclick="addExcelRow()">+ Wiersz</button>
+                <button class="btn btn-sm" onclick="addExcelCol()">+ Kolumna</button>
+                <button class="btn btn-sm btn-primary" onclick="saveExcelChanges()">Zapisz i Zamknij</button>
+                <button class="btn btn-sm" onclick="cancelExcelChanges()">Anuluj</button>
             </div>
             <div id="excelContainer"></div>
         </div>
     </main>
 
-    <!-- PŁYWAJĄCE LOGO Z LINKAMI (FLOATING WIDGET) -->
-    <div class="floating-logo-btn" onclick="openSocialModal()" title="Oprzeć współpracę z Koziarem">
+    <!-- PŁYWAJĄCE LOGO Z LINKAMI -->
+    <div class="floating-logo-btn" onclick="openSocialModal()" title="Współpraca z Koziarem">
         <img src="logo.png" alt="Koziar Fit Logo">
     </div>
 
     <!-- NAV BAR MOBILNY -->
-    <nav class="bottom-nav">
+    <nav class="bottom-nav" id="mainBottomNav">
         <button class="nav-btn" id="btnToggleMode" onclick="toggleViewMode()">
             <i data-lucide="zap"></i>
             <span id="lblToggleMode">PRO</span>
@@ -108,21 +109,21 @@
         </div>
     </div>
 
-    <!-- MODAL EKSPORTU -->
+    <!-- MODAL EKSPORTU / NADAWANIA KODU -->
     <div id="exportModal" class="modal">
         <div class="modal-box">
-            <h3>Udostępnij Plan</h3>
+            <h3>Udostępnij Plan / Nadaj Kod</h3>
             <p id="exportKeyInfo" style="font-weight:bold; color:var(--gold); font-size:12px; text-align:center;"></p>
             <textarea id="exportText" readonly></textarea>
             <div class="modal-actions">
-                <button id="btnSetKey" class="btn btn-primary" style="display:none;" onclick="setPlanAccessKey()">Nadaj Kod (Trener)</button>
+                <button id="btnSetKey" class="btn btn-primary" onclick="setPlanAccessKey()">Nadaj Kod Planu</button>
                 <button class="btn" onclick="downloadTSV()">Pobierz TSV</button>
                 <button class="btn" onclick="closeModals()">Zamknij</button>
             </div>
         </div>
     </div>
 
-    <!-- MODAL WSPÓŁPRACY / SOCIAL MEDIA -->
+    <!-- MODAL SOCIAL MEDIA -->
     <div id="socialModal" class="modal">
         <div class="modal-box social-box">
             <div class="social-header">
@@ -155,7 +156,6 @@
         </div>
     </div>
 
-    <!-- LOGIKA ZEWNĘTRZNA -->
     <script src="script.js"></script>
 </body>
 </html>

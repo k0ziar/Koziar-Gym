@@ -21,9 +21,12 @@ if (!deviceId) {
 
 var currentMode = 'basic'; // basic / pro / edit
 var hotInstance = null;
+var tempExcelData = null;
 var expandedExercises = {};
 
 var unlockedKeys = JSON.parse(localStorage.getItem('koziar_unlocked_keys')) || [];
+var hiddenPlans = JSON.parse(localStorage.getItem('koziar_hidden_plans')) || [];
+var subSetData = JSON.parse(localStorage.getItem('koziar_subset_data')) || {};
 
 var defaultPlans = {
     "FBW 3-Dniowy (Domyślny) - by Koziar": {
@@ -51,6 +54,8 @@ function saveAll() {
     }
     localStorage.setItem('koziar_current_plan', currentPlan);
     localStorage.setItem('koziar_checks', JSON.stringify(checks));
+    localStorage.setItem('koziar_hidden_plans', JSON.stringify(hiddenPlans));
+    localStorage.setItem('koziar_subset_data', JSON.stringify(subSetData));
 
     syncPlanToCloud(currentPlan);
 }
@@ -100,14 +105,16 @@ async function loadPlansFromCloud() {
             let loadedPlans = JSON.parse(JSON.stringify(defaultPlans));
 
             data.forEach(row => {
-                loadedPlans[row.plan_name] = {
-                    isLocked: false,
-                    notes: row.notes,
-                    data: row.data,
-                    accessKey: row.access_key,
-                    ownerDeviceId: row.user_device_id
-                };
-                if (row.checks) checks = { ...checks, ...row.checks };
+                if (!hiddenPlans.includes(row.plan_name) || isAdmin) {
+                    loadedPlans[row.plan_name] = {
+                        isLocked: false,
+                        notes: row.notes,
+                        data: row.data,
+                        accessKey: row.access_key,
+                        ownerDeviceId: row.user_device_id
+                    };
+                    if (row.checks) checks = { ...checks, ...row.checks };
+                }
             });
 
             plans = loadedPlans;
@@ -124,63 +131,50 @@ async function loadPlansFromCloud() {
     }
 }
 
-// PRZEŁĄCZANIE TRYBU BASIC / PRO
+// PRZEŁĄCZANIE TRYBÓW
 function toggleViewMode() {
-    if (currentMode === 'edit') {
-        currentMode = 'pro';
-    } else if (currentMode === 'basic') {
-        currentMode = 'pro';
-    } else {
-        currentMode = 'basic';
-    }
-    
+    if (currentMode === 'edit') return;
+    currentMode = (currentMode === 'basic') ? 'pro' : 'basic';
     updateNavButtons();
     setMode(currentMode);
 }
 
 function toggleEditMode() {
-    if (currentMode === 'edit') {
-        setMode('basic');
-    } else {
-        setMode('edit');
-    }
+    if (currentMode === 'edit') return;
+    setMode('edit');
 }
 
 function updateNavButtons() {
     const lbl = document.getElementById('lblToggleMode');
     if (lbl) lbl.innerText = currentMode === 'pro' ? 'PRO' : 'BASIC';
-    
-    const btnEdit = document.getElementById('btnEditMode');
-    if (btnEdit) {
-        if (currentMode === 'edit') btnEdit.classList.add('active');
-        else btnEdit.classList.remove('active');
-    }
 }
 
-// LOKALNE USUWANIE PLANU (Zostawia backup na bazie Supabase dla trenera/admina)
+// TRWAŁE USUWANIE LOKALNE
 function deleteCurrentPlan() {
+    if (currentMode === 'edit') return;
     const p = plans[currentPlan];
     if (!p) return alert("Nie wybrano planu.");
     if (p.isLocked) return alert("Nie możesz usunąć oficjalnego planu domyślnego.");
 
-    if (confirm(`Czy na pewno chcesz usunąć plan "${currentPlan}" ze swojego urządzenia?\n(Plan pozostanie zapisany w bazie danych trenera)`)) {
-        // 1. Czyszczenie lokalnych odblokowanych kluczy
+    if (confirm(`Czy na pewno chcesz usunąć plan "${currentPlan}" lokalnie?\n(Backup pozostanie zachowany w chmurze).`)) {
+        if (!hiddenPlans.includes(currentPlan)) {
+            hiddenPlans.push(currentPlan);
+        }
+
         if (p.accessKey) {
             unlockedKeys = unlockedKeys.filter(k => k !== p.accessKey);
             localStorage.setItem('koziar_unlocked_keys', JSON.stringify(unlockedKeys));
         }
 
-        // 2. Usunięcie tylko ze stanu lokalnego
         delete plans[currentPlan];
-        localStorage.setItem('koziar_plans', JSON.stringify(plans));
+        saveAll();
 
-        // 3. Przełączenie na plan domyślny
         currentPlan = Object.keys(plans)[0];
         localStorage.setItem('koziar_current_plan', currentPlan);
 
         initPlanSelect();
         renderGymView();
-        alert("Plan został usunięty lokalnie z Twojego telefonu.");
+        alert("Plan został pomyślnie usunięty lokalnie.");
     }
 }
 
@@ -196,7 +190,7 @@ function secretAdminPrompt() {
         unlockedKeys.push(pin.trim());
         localStorage.setItem('koziar_unlocked_keys', JSON.stringify(unlockedKeys));
         loadPlansFromCloud();
-        alert("Sprawdzam kod i pobieram plan...");
+        alert("Pobieram plan przypisany do kodu...");
     }
 }
 
@@ -211,16 +205,16 @@ function logoutAdmin() {
 }
 
 function setPlanAccessKey() {
-    if (!isAdmin) return alert("Wymagany tryb Trenera!");
     const p = plans[currentPlan];
-    if (!p || p.isLocked) return alert("Wybierz własny plan.");
+    if (!p || p.isLocked) return alert("Wybierz własny odblokowany plan.");
 
-    const key = prompt(`Ustaw Klucz Dostępu dla podopiecznego dla planu "${currentPlan}":`, p.accessKey || "");
+    const key = prompt(`Ustaw Klucz Dostępu (kod) dla planu "${currentPlan}":`, p.accessKey || "");
     if (key !== null) {
         p.accessKey = key.trim();
         saveAll();
         initPlanSelect();
-        alert(`Klucz "${p.accessKey}" został zapisany!`);
+        openExport();
+        alert(`Klucz "${p.accessKey}" został pomyślnie nadany i zapisany!`);
     }
 }
 
@@ -231,8 +225,9 @@ function checkAdminBadge() {
     }
 }
 
-// MODALE IMPORT / EKSPORT / SOCIALS
+// MODALE
 function openImport() {
+    if (currentMode === 'edit') return;
     document.getElementById("importModal").classList.add("active");
 }
 
@@ -284,6 +279,7 @@ function handleImportOrKey() {
 }
 
 function openExport() {
+    if (currentMode === 'edit') return;
     const p = plans[currentPlan];
     let lines = [`!!NOTES!!\t${(p.notes || "").replace(/\n/g, "[BR]")}`];
     p.data.forEach(r => lines.push(r.join("\t")));
@@ -295,13 +291,9 @@ function openExport() {
         keyInfo.innerText = p.accessKey ? `Klucz dostępu planu: ${p.accessKey}` : "Brak przypisanego klucza dostępu.";
     }
 
-    const btnSetKey = document.getElementById("btnSetKey");
-    if (btnSetKey) btnSetKey.style.display = isAdmin ? "inline-block" : "none";
-
     document.getElementById("exportModal").classList.add("active");
 }
 
-// RENDEROWANIE I PEŁNA EDYCYJNOŚĆ TABELI EXCEL
 function initPlanSelect() {
     const select = document.getElementById("planSelect");
     if (!select) return;
@@ -313,10 +305,12 @@ function initPlanSelect() {
     gUser.label = isAdmin ? "👑 WSZYSTKIE PLANY (TRENER)" : "💪 TWOJE PLANY";
 
     Object.keys(plans).forEach(name => {
-        const keyTag = plans[name].accessKey ? ` 🔑[${plans[name].accessKey}]` : '';
-        const opt = new Option(name + keyTag, name);
-        if (plans[name].isLocked) gOfficial.appendChild(opt);
-        else gUser.appendChild(opt);
+        if (!hiddenPlans.includes(name) || isAdmin) {
+            const keyTag = plans[name].accessKey ? ` 🔑[${plans[name].accessKey}]` : '';
+            const opt = new Option(name + keyTag, name);
+            if (plans[name].isLocked) gOfficial.appendChild(opt);
+            else gUser.appendChild(opt);
+        }
     });
 
     if (gOfficial.children.length > 0) select.appendChild(gOfficial);
@@ -329,6 +323,7 @@ function initPlanSelect() {
 }
 
 function loadPlan() {
+    if (currentMode === 'edit') return;
     currentPlan = document.getElementById("planSelect").value;
     saveAll();
     renderGymView();
@@ -342,21 +337,30 @@ function saveNotes() {
     }
 }
 
+// EDYTOR EXCEL & LOCK NAWIGACJI
 function setMode(mode) {
     currentMode = mode;
     updateNavButtons();
 
     const gymView = document.getElementById('gymView');
     const editArea = document.getElementById('editArea');
+    const notesContainer = document.getElementById('notesContainer');
+    const bottomNav = document.getElementById('mainBottomNav');
+    const planSelect = document.getElementById('planSelect');
 
     if (mode === 'edit') {
         gymView.style.display = 'none';
+        notesContainer.style.display = 'none';
         editArea.style.display = 'block';
+        bottomNav.classList.add('nav-locked');
+        planSelect.disabled = true;
         initExcel();
     } else {
-        if (hotInstance) saveSheetData();
         editArea.style.display = 'none';
+        notesContainer.style.display = 'block';
         gymView.style.display = 'block';
+        bottomNav.classList.remove('nav-locked');
+        planSelect.disabled = false;
         renderGymView();
     }
 }
@@ -368,8 +372,10 @@ function initExcel() {
     container.innerHTML = '';
 
     const p = plans[currentPlan];
+    tempExcelData = JSON.parse(JSON.stringify(p.data));
+
     hotInstance = new Handsontable(container, {
-        data: JSON.parse(JSON.stringify(p.data)),
+        data: tempExcelData,
         rowHeaders: true,
         colHeaders: true,
         height: '100%',
@@ -380,8 +386,7 @@ function initExcel() {
         manualColumnResize: true,
         manualRowResize: true,
         stretchH: 'all',
-        readOnly: p.isLocked,
-        afterChange: () => saveSheetData()
+        readOnly: p.isLocked
     });
 }
 
@@ -393,11 +398,17 @@ function addExcelCol() {
     if (hotInstance) hotInstance.alter('insert_col_right');
 }
 
-function saveSheetData() {
+function saveExcelChanges() {
     if (hotInstance && plans[currentPlan] && !plans[currentPlan].isLocked) {
         plans[currentPlan].data = hotInstance.getData();
         saveAll();
     }
+    setMode('basic');
+}
+
+function cancelExcelChanges() {
+    tempExcelData = null;
+    setMode('basic');
 }
 
 function parseSheetToStructure() {
@@ -467,6 +478,13 @@ function updateCellDirectly(rowIndex, colIndex, value) {
     plans[currentPlan].data[rowIndex][colIndex] = value;
     saveAll();
     renderGymView();
+}
+
+function updateSubSetCell(key, setIdx, headerName, value) {
+    const subKey = `${key}_s${setIdx}`;
+    if (!subSetData[subKey]) subSetData[subKey] = {};
+    subSetData[subKey][headerName] = value;
+    saveAll();
 }
 
 function renderGymView() {
@@ -544,6 +562,7 @@ function renderGymView() {
 
                             ${(isExpanded && currentMode === 'pro') ? Array.from({length: count}).map((_, s) => {
                                 const subChecked = checks[key]?.[`sub_${s}`] || false;
+                                const subKey = `${key}_s${s}`;
                                 return `
                                     <div class="row-grid sub-row ${subChecked ? 'done' : ''}">
                                         <div class="col-cell expand-col"></div>
@@ -554,10 +573,10 @@ function renderGymView() {
                                         <div class="col-cell name-col" style="font-size:11px; color:var(--text-dim);">Seria ${s+1}</div>
                                         ${activeHeaders.map(h => {
                                             if (h.name.toUpperCase() === 'S') return `<div class="col-cell" style="color:var(--text-dim);">-</div>`;
-                                            const cellData = ex.data[h.name] || { val: '' };
+                                            const savedSubVal = subSetData[subKey]?.[h.name] !== undefined ? subSetData[subKey][h.name] : '';
                                             return `
                                                 <div class="col-cell">
-                                                    <input type="text" class="cell-input" value="${cellData.val}" ${isReadOnlyAttr} placeholder="${h.name}">
+                                                    <input type="text" class="cell-input" value="${savedSubVal}" ${isReadOnlyAttr} placeholder="-" onchange="updateSubSetCell('${key}', ${s}, '${h.name}', this.value)">
                                                 </div>
                                             `;
                                         }).join('')}
@@ -583,6 +602,7 @@ function toggleCheck(key, target, value) {
 }
 
 function newPlan() {
+    if (currentMode === 'edit') return;
     const name = prompt("Nazwa nowego planu:");
     if (name && name.trim()) {
         plans[name] = {
@@ -603,8 +623,10 @@ function newPlan() {
 }
 
 function resetWeek() {
+    if (currentMode === 'edit') return;
     if (confirm("Resetować zaznaczone serie?")) {
         checks = {};
+        subSetData = {};
         saveAll();
         renderGymView();
     }

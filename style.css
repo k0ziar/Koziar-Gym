@@ -102,8 +102,9 @@ header {
     text-overflow: ellipsis;
 }
 
-#planSelect:focus {
-    box-shadow: 0 0 12px var(--gold-glow);
+#planSelect:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 /* --- KONTENER GŁÓWNY --- */
@@ -173,23 +174,6 @@ main {
     justify-content: space-between; 
     align-items: center;
     letter-spacing: 0.5px;
-}
-
-.day-header-actions {
-    display: flex;
-    gap: 8px;
-}
-
-.icon-btn-subtle {
-    background: rgba(255,255,255,0.06);
-    border: none;
-    color: var(--gold);
-    padding: 6px 10px;
-    border-radius: 8px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .rest-badge { 
@@ -265,7 +249,7 @@ main {
     background: rgba(212, 175, 55, 0.1); 
 }
 
-/* ZAZNACZONE (SKREŚLONE JAK NA SCREENIE) */
+/* ZAZNACZONE WIERSZE */
 .row-grid.done { 
     background: rgba(212, 175, 55, 0.04) !important; 
 }
@@ -292,7 +276,7 @@ input[type="checkbox"] {
     align-items: center; 
 }
 
-/* EDYTOR EXCEL */
+/* EDYTOR EXCEL & BLOKADA NAWIGACJI */
 .excel-toolbar {
     display: flex;
     gap: 8px;
@@ -307,11 +291,13 @@ input[type="checkbox"] {
     overflow: hidden; 
     border: 1px solid var(--border-gold);
 }
-.handsontable {
-    color: #000;
+
+.bottom-nav.nav-locked .nav-btn:not(#btnEditMode) {
+    opacity: 0.3;
+    pointer-events: none;
 }
 
-/* PŁYWAJĄCE LOGO SOCIAL MEDIA */
+/* PŁYWAJĄCE LOGO */
 .floating-logo-btn {
     position: fixed;
     bottom: 75px;
@@ -327,12 +313,11 @@ input[type="checkbox"] {
     justify-content: center;
     cursor: pointer;
     z-index: 999;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease;
 }
 
 .floating-logo-btn:hover {
     transform: scale(1.08);
-    box-shadow: 0 0 25px var(--gold-glow-strong);
 }
 
 .floating-logo-btn img {
