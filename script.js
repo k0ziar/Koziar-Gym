@@ -10,7 +10,6 @@ if (typeof window.sbClient === 'undefined') {
     }
 }
 
-// USTAWIENIA ADMINA / KODÓW
 const ADMIN_PIN = "0000";
 var isAdmin = localStorage.getItem('koziar_is_admin') === 'true';
 
@@ -20,8 +19,7 @@ if (!deviceId) {
     localStorage.setItem('koziar_device_id', deviceId);
 }
 
-// STANY APLIKACJI
-var currentMode = 'basic';
+var currentMode = 'basic'; // basic / pro / edit
 var hotInstance = null;
 var expandedExercises = {};
 
@@ -43,7 +41,6 @@ var plans = JSON.parse(localStorage.getItem('koziar_plans')) || defaultPlans;
 var currentPlan = localStorage.getItem('koziar_current_plan') || Object.keys(plans)[0];
 var checks = JSON.parse(localStorage.getItem('koziar_checks')) || {};
 
-// ZAPIS LOKALNY I W CHMURZE
 function saveAll() {
     if (!isAdmin) {
         localStorage.setItem('koziar_plans', JSON.stringify(plans));
@@ -72,17 +69,14 @@ async function syncPlanToCloud(planName) {
             updated_at: new Date().toISOString()
         };
 
-        const { error } = await window.sbClient
+        await window.sbClient
             .from('user_plans')
             .upsert(payload, { onConflict: 'user_device_id, plan_name' });
-
-        if (error) console.error("Błąd zapisu w Supabase:", error.message);
     } catch (err) {
         console.warn("Brak połączenia z chmurą.");
     }
 }
 
-// POBIERANIE PLANÓW
 async function loadPlansFromCloud() {
     if (!window.sbClient) return;
     try {
@@ -98,7 +92,7 @@ async function loadPlansFromCloud() {
 
         const { data, error } = await query;
 
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
             let loadedPlans = JSON.parse(JSON.stringify(defaultPlans));
 
             data.forEach(row => {
@@ -126,107 +120,171 @@ async function loadPlansFromCloud() {
     }
 }
 
-// FUNKCJA USUWANIA PLANU (LOKALNIE LUB Z BAZY)
+// PRZEŁĄCZANIE TRYBU BASIC / PRO W JEDNYM PRZYCISKU
+function toggleViewMode() {
+    if (currentMode === 'basic') {
+        currentMode = 'pro';
+    } else {
+        currentMode = 'basic';
+    }
+    
+    const btn = document.getElementById('btnToggleMode');
+    if (btn) {
+        btn.innerHTML = currentMode === 'pro' 
+            ? `<i data-lucide="layers"></i> Tryb: PRO` 
+            : `<i data-lucide="check-square"></i> Tryb: BASIC`;
+    }
+
+    setMode(currentMode);
+}
+
+// SKUTECZNE USUWANIE PLANU
 async function deleteCurrentPlan() {
     const p = plans[currentPlan];
     if (!p) return alert("Nie wybrano planu.");
     if (p.isLocked) return alert("Nie możesz usunąć oficjalnego planu domyślnego.");
 
-    const confirmMsg = isAdmin 
-        ? `Czy chcesz usunąć plan "${currentPlan}"?\n\n[OK] = Usuń trwale z BAZY DANYCH (Supabase)\n[Anuluj] = Przerwij`
-        : `Czy na pewno chcesz usunąć plan "${currentPlan}" ze swojej listy?`;
-
-    if (confirm(confirmMsg)) {
-        // 1. Jeśli jesteśmy Trenerem - kasujemy również rekord z Supabase
-        if (isAdmin && window.sbClient) {
+    if (confirm(`Czy na pewno chcesz usunąć plan "${currentPlan}"?`)) {
+        // 1. Usunięcie z bazy Supabase
+        if (window.sbClient) {
             try {
                 const targetDeviceId = p.ownerDeviceId || deviceId;
-                const { error } = await window.sbClient
+                await window.sbClient
                     .from('user_plans')
                     .delete()
                     .eq('user_device_id', targetDeviceId)
                     .eq('plan_name', currentPlan);
-
-                if (error) alert("Błąd podczas usuwania z bazy: " + error.message);
-                else alert("Plan został trwale usunięty z bazy Supabase!");
             } catch (err) {
-                console.error("Błąd połączenia podczas usuwania z bazy.");
+                console.error("Błąd bazy danych:", err);
             }
         }
 
-        // 2. Jeśli plan miał klucz dostępu, usuwamy klucz z lokalnej pamięci użytkownika
+        // 2. Czyszczenie klucza dostępu, aby plan nie wracał przy pobieraniu z chmury
         if (p.accessKey) {
             unlockedKeys = unlockedKeys.filter(k => k !== p.accessKey);
             localStorage.setItem('koziar_unlocked_keys', JSON.stringify(unlockedKeys));
         }
 
-        // 3. Usuwamy plan ze stanu aplikacji
+        // 3. Usunięcie ze stanu lokalnego
         delete plans[currentPlan];
-
-        // 4. Czyścimy lokalny zapis
         localStorage.setItem('koziar_plans', JSON.stringify(plans));
 
-        // 5. Przełączamy na pierwszy dostępny plan
+        // 4. Przełączenie na plan domyślny
         currentPlan = Object.keys(plans)[0];
         localStorage.setItem('koziar_current_plan', currentPlan);
 
         initPlanSelect();
         renderGymView();
+        alert("Plan został pomyślnie usunięty.");
     }
 }
 
-// LOGIKA ADMINA I KLUCZY
-function toggleAdminMode() {
-    if (isAdmin) {
-        isAdmin = false;
-        localStorage.setItem('koziar_is_admin', 'false');
-        localStorage.removeItem('koziar_plans');
-        alert("Wylogowano z trybu Trenera.");
+// DYSKRETNE WEJŚCIE W TRYB ADMINA
+function secretAdminPrompt() {
+    const pin = prompt("Wprowadź Kod Dostępu / PIN Trenera:");
+    if (pin === ADMIN_PIN) {
+        isAdmin = true;
+        localStorage.setItem('koziar_is_admin', 'true');
+        alert("Zalogowano w trybie TRENERA!");
         location.reload();
-    } else {
-        const pin = prompt("Wprowadź PIN Trenera:");
-        if (pin === ADMIN_PIN) {
-            isAdmin = true;
-            localStorage.setItem('koziar_is_admin', 'true');
-            alert("Zalogowano jako TRENER!");
-            location.reload();
-        } else if (pin) {
-            alert("Błędny PIN!");
-        }
-    }
-}
-
-function unlockPlanWithKey() {
-    const key = prompt("Wpisz Klucz Dostępu do Planu odebranego od Trenera:");
-    if (key && key.trim()) {
-        const cleanKey = key.trim();
-        if (!unlockedKeys.includes(cleanKey)) {
-            unlockedKeys.push(cleanKey);
-            localStorage.setItem('koziar_unlocked_keys', JSON.stringify(unlockedKeys));
-        }
+    } else if (pin) {
+        // Jeśli wpisano jakikolwiek inny ciąg znaków, traktujemy go jako Klucz Planu!
+        unlockedKeys.push(pin.trim());
+        localStorage.setItem('koziar_unlocked_keys', JSON.stringify(unlockedKeys));
         loadPlansFromCloud();
         alert("Sprawdzam kod i pobieram plan...");
     }
 }
 
-function setPlanAccessKey() {
-    if (!isAdmin) return alert("Tylko Trener może nadawać kody dostępu!");
-    
-    const p = plans[currentPlan];
-    if (!p || p.isLocked) return alert("Wybierz własny plan (nie domyślny).");
+function logoutAdmin() {
+    isAdmin = false;
+    localStorage.setItem('koziar_is_admin', 'false');
+    localStorage.removeItem('koziar_plans');
+    alert("Wylogowano z trybu Trenera.");
+    location.reload();
+}
 
-    const currentKey = p.accessKey || "";
-    const key = prompt(`Ustaw Klucz Dostępu dla planu "${currentPlan}":`, currentKey);
-    
+function setPlanAccessKey() {
+    if (!isAdmin) return alert("Wymagany tryb Trenera!");
+    const p = plans[currentPlan];
+    if (!p || p.isLocked) return alert("Wybierz własny plan.");
+
+    const key = prompt(`Ustaw Klucz Dostępu dla podopiecznego dla planu "${currentPlan}":`, p.accessKey || "");
     if (key !== null) {
         p.accessKey = key.trim();
         saveAll();
         initPlanSelect();
-        alert(`Klucz "${p.accessKey}" został przypisany i zapisany w bazie!`);
+        alert(`Klucz "${p.accessKey}" został zapisany!`);
     }
 }
 
-// INTERFEJS
+// POLĄCZONY MODAL IMPORTU / KODÓW
+function openImport() {
+    document.getElementById("importModal").classList.add("active");
+}
+
+function handleImportOrKey() {
+    const val = document.getElementById("importInputVal").value.trim();
+    if (!val) return;
+
+    if (val === ADMIN_PIN) {
+        secretAdminPrompt();
+        closeModals();
+        return;
+    }
+
+    // Sprawdzamy czy to kod czy wklejony tekst TSV
+    if (val.includes("\t") || val.includes("\n")) {
+        const lines = val.split("\n");
+        let notes = "";
+        let data = [];
+
+        lines.forEach(l => {
+            if (l.startsWith("!!NOTES!!")) {
+                notes = l.split("\t")[1]?.replace(/\[BR\]/g, "\n") || "";
+            } else {
+                data.push(l.split("\t"));
+            }
+        });
+
+        const name = prompt("Nazwa dla importowanego planu:", "Importowany Plan");
+        if (name && name.trim()) {
+            plans[name] = { isLocked: false, notes, data, ownerDeviceId: deviceId };
+            currentPlan = name;
+            saveAll();
+            initPlanSelect();
+            closeModals();
+            renderGymView();
+        }
+    } else {
+        // Traktuj jako kod dostępu
+        if (!unlockedKeys.includes(val)) {
+            unlockedKeys.push(val);
+            localStorage.setItem('koziar_unlocked_keys', JSON.stringify(unlockedKeys));
+        }
+        loadPlansFromCloud();
+        closeModals();
+        alert("Pobieram plan przypisany do kodu...");
+    }
+}
+
+// POŁĄCZONY MODAL EKSPORTU I KODU NADAWANIA
+function openExport() {
+    const p = plans[currentPlan];
+    let lines = [`!!NOTES!!\t${(p.notes || "").replace(/\n/g, "[BR]")}`];
+    p.data.forEach(r => lines.push(r.join("\t")));
+    
+    document.getElementById("exportText").value = lines.join("\n");
+    
+    const keyInfo = document.getElementById("exportKeyInfo");
+    if (keyInfo) {
+        keyInfo.innerText = p.accessKey ? `Klucz dostępu planu: ${p.accessKey}` : "Brak przypisanego klucza dostępu.";
+    }
+
+    document.getElementById("exportModal").classList.add("active");
+}
+
+// RENDEROWANIE I INTERFEJS
 function initPlanSelect() {
     const select = document.getElementById("planSelect");
     if (!select) return;
@@ -259,28 +317,15 @@ function loadPlan() {
 
 function setMode(mode) {
     currentMode = mode;
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active', 'active-edit', 'active-pro'));
-
-    const badge = document.getElementById('modeBadge');
-    if (badge) {
-        badge.className = 'mode-badge mode-' + mode;
-        badge.innerText = (isAdmin ? "👑 TRENER | " : "") + (mode === 'edit' ? 'EDYCJA' : 'TRYB ' + mode.toUpperCase());
-    }
-
     const gymView = document.getElementById('gymView');
     const editArea = document.getElementById('editArea');
 
     if (mode === 'edit') {
-        if (document.getElementById('btnEdit')) document.getElementById('btnEdit').classList.add('active-edit');
         gymView.style.display = 'none';
         editArea.style.display = 'block';
         initExcel();
     } else {
-        if (mode === 'basic' && document.getElementById('btnBasic')) document.getElementById('btnBasic').classList.add('active');
-        if (mode === 'pro' && document.getElementById('btnPro')) document.getElementById('btnPro').classList.add('active', 'active-pro');
-        
         if (hotInstance) saveSheetData();
-        
         editArea.style.display = 'none';
         gymView.style.display = 'block';
         renderGymView();
@@ -313,31 +358,6 @@ function saveSheetData() {
     if (hotInstance && plans[currentPlan] && !plans[currentPlan].isLocked) {
         plans[currentPlan].data = hotInstance.getData();
         saveAll();
-    }
-}
-
-function addRow(count = 5) {
-    if (hotInstance && !plans[currentPlan].isLocked) {
-        hotInstance.alter('insert_row_below', hotInstance.countRows(), count);
-    }
-}
-
-function addCol() {
-    if (plans[currentPlan].isLocked) return;
-    plans[currentPlan].data.forEach((row, idx) => {
-        if (idx === 1) row.push("Nowa");
-        else row.push("");
-    });
-    saveAll();
-    if (hotInstance) initExcel();
-}
-
-function clearSheet() {
-    if (plans[currentPlan].isLocked) return;
-    if (confirm("Czy na pewno chcesz wyczyścić ten arkusz?")) {
-        plans[currentPlan].data = [["Dzień 1", "", "", "", ""], ["Nr", "Ćwiczenie", "S", "P", "KG"]];
-        saveAll();
-        initExcel();
     }
 }
 
@@ -526,14 +546,6 @@ function toggleCheck(key, target, value) {
     renderGymView();
 }
 
-function autoHeight(el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
-function saveNotes() {
-    if (plans[currentPlan] && !plans[currentPlan].isLocked) {
-        plans[currentPlan].notes = document.getElementById("planNotes").value;
-        saveAll();
-    }
-}
-
 function newPlan() {
     const name = prompt("Nazwa nowego planu:");
     if (name && name.trim()) {
@@ -562,14 +574,6 @@ function resetWeek() {
     }
 }
 
-function openExport() {
-    const p = plans[currentPlan];
-    let lines = [`!!NOTES!!\t${(p.notes || "").replace(/\n/g, "[BR]")}`];
-    p.data.forEach(r => lines.push(r.join("\t")));
-    document.getElementById("exportText").value = lines.join("\n");
-    document.getElementById("exportModal").classList.add("active");
-}
-
 function downloadTSV() {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([document.getElementById("exportText").value], { type: "text/tab-separated-values" }));
@@ -577,49 +581,24 @@ function downloadTSV() {
     a.click();
 }
 
-function openImport() { document.getElementById("importModal").classList.add("active"); }
-
 function handleFileSelect(e) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => { document.getElementById("importText").value = ev.target.result; };
+    reader.onload = (ev) => { document.getElementById("importInputVal").value = ev.target.result; };
     reader.readAsText(file);
 }
 
-function applyImport() {
-    const txt = document.getElementById("importText").value.trim();
-    if (!txt) return;
-
-    const lines = txt.split("\n");
-    let notes = "";
-    let data = [];
-
-    lines.forEach(l => {
-        if (l.startsWith("!!NOTES!!")) {
-            notes = l.split("\t")[1]?.replace(/\[BR\]/g, "\n") || "";
-        } else {
-            data.push(l.split("\t"));
-        }
-    });
-
-    const name = prompt("Podaj nazwę dla importowanego planu:", "Importowany Plan");
-    if (name && name.trim()) {
-        plans[name] = { isLocked: false, notes, data, ownerDeviceId: deviceId };
-        currentPlan = name;
-        saveAll();
-        initPlanSelect();
-        closeModals();
-        renderGymView();
-    }
-}
-
-function openAbout() { document.getElementById("aboutModal").classList.add("active"); }
 function closeModals() { document.querySelectorAll(".modal").forEach(m => m.classList.remove("active")); }
 
-// INICJALIZACJA
 document.addEventListener("DOMContentLoaded", () => {
     initPlanSelect();
     renderGymView();
     loadPlansFromCloud();
+    
+    // Obsługa ukrytego wejścia w Admina (Kliknięcie logo w nagłówku)
+    const logoHeader = document.querySelector('.app-header h1, .brand-logo');
+    if (logoHeader) {
+        logoHeader.addEventListener('click', secretAdminPrompt);
+    }
 });

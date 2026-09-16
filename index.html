@@ -1,139 +1,98 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Koziar Gym Plans - Premium Workout</title>
-
-<link rel="icon" type="image/png" href="logo.png">
-<link rel="apple-touch-icon" href="logo.png">
-<meta name="theme-color" content="#0a0a0a">
-
-<!-- Fonts -->
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-
-<!-- 1. Handsontable (Silnik Excela) -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css" />
-<script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
-
-<!-- 2. Lucide Icons & Supabase SDK -->
-<script src="https://unpkg.com/lucide@latest"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<!-- 3. CSS -->
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Trening Koziar</title>
+    <!-- Twoje istniejące CSS, Handsontable, Lucide Icons -->
 </head>
-<body id="bodyTag">
+<body>
 
-<header>
-    <div class="header-top">
-        <div id="modeBadge" class="mode-badge mode-basic">TRYB BASIC</div>
-        <div class="app-title">KOZIAR GYM PLANS</div>
-    </div>
-    <select id="planSelect" onchange="loadPlan()"></select>
-</header>
-
-<div class="floating-footer" id="floatingLogo">
-    <div class="floating-logo" onclick="openAbout()">
-        <img src="logo.png" alt="Logo" onerror="this.style.display='none'; this.parentElement.innerText='K';">
-    </div>
-</div>
-
-<main id="app">
-    <div class="notes-area">
-        <label>Notatki do planu</label>
-        <textarea id="planNotes" oninput="autoHeight(this); saveNotes()" placeholder="Cele, progresja, zalecenia suplementacyjne..."></textarea>
-    </div>
-
-    <!-- Widok Główny Treningowy -->
-    <div id="gymView"></div>
-
-    <!-- Widok Edytora Excela -->
-    <div id="editArea" style="display:none;">
-        <div class="sheet-toolbar">
-            <button class="btn-sheet" onclick="addRow(5)"><i data-lucide="plus"></i> Dodaj Wiersze (+5)</button>
-            <button class="btn-sheet" onclick="addCol()"><i data-lucide="columns"></i> Dodaj Kolumnę</button>
-            <button class="btn-sheet btn-danger" onclick="clearSheet()"><i data-lucide="trash-2"></i> Wyczyść Arkusz</button>
+    <!-- NAGŁÓWEK -->
+    <header class="app-header">
+        <!-- Kliknięcie w nazwę aktywuje wpisanie PINu Admina! -->
+        <h1 class="brand-logo" title="Kliknij, aby podać PIN">KOZIAR <span>FIT</span></h1>
+        
+        <div class="header-controls">
+            <select id="planSelect" onchange="loadPlan()"></select>
+            <button class="btn-icon btn-danger" onclick="deleteCurrentPlan()" title="Usuń Plan">
+                <i data-lucide="trash-2"></i>
+            </button>
         </div>
-        <div id="excelContainer"></div>
+    </header>
+
+    <!-- KONTENER GŁÓWNY -->
+    <main class="container">
+        <!-- NOTATKI -->
+        <div class="notes-card">
+            <textarea id="planNotes" placeholder="Notatki do planu..." onchange="saveNotes()"></textarea>
+        </div>
+
+        <!-- WIDOK PLANU -->
+        <div id="gymView"></div>
+
+        <!-- WIDOK EXCELA (EDYCJA) -->
+        <div id="editArea" style="display:none;">
+            <div id="excelContainer"></div>
+        </div>
+    </main>
+
+    <!-- DOLNA NAWIGACJA MOBILNA -->
+    <nav class="bottom-nav">
+        <!-- Jeden przycisk do przełączania trybów BASIC / PRO -->
+        <button class="nav-btn" id="btnToggleMode" onclick="toggleViewMode()">
+            <i data-lucide="check-square"></i><span>BASIC / PRO</span>
+        </button>
+
+        <button class="nav-btn" onclick="setMode('edit')">
+            <i data-lucide="edit-3"></i><span>EDYTUJ</span>
+        </button>
+
+        <button class="nav-btn" onclick="newPlan()">
+            <i data-lucide="plus-circle"></i><span>NOWY</span>
+        </button>
+
+        <button class="nav-btn" onclick="openImport()">
+            <i data-lucide="download"></i><span>DODAJ / KOD</span>
+        </button>
+
+        <button class="nav-btn" onclick="openExport()">
+            <i data-lucide="share-2"></i><span>UDOSTĘPNIJ</span>
+        </button>
+    </nav>
+
+    <!-- MODAL IMPORTU / KODU -->
+    <div id="importModal" class="modal">
+        <div class="modal-content">
+            <h3>Wprowadź Kod lub Plik Planu</h3>
+            <p style="font-size: 12px; color: #888;">Wpisz Kod Planu od Trenera, PIN Admina lub wklej treść planu.</p>
+            
+            <textarea id="importInputVal" placeholder="Kod planu / PIN / Treść TSV..."></textarea>
+            
+            <input type="file" id="fileInput" onchange="handleFileSelect(event)" style="margin: 10px 0;">
+            
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="handleImportOrKey()">Zatwierdź</button>
+                <button class="btn" onclick="closeModals()">Zamknij</button>
+            </div>
+        </div>
     </div>
-</main>
 
-<div id="lockedFooter" style="display:none; padding: 16px; position: fixed; bottom: 85px; width: 100%; text-align: center; z-index:90;">
-    <button class="activate-btn" onclick="activatePlan()">
-        ⭐ UTWÓRZ WŁASNĄ KOPIĘ (EDYTUJ)
-    </button>
-</div>
-
-<!-- DOLNA NAWIGACJA -->
-<nav class="bottom-nav">
-    <button class="nav-btn active" id="btnBasic" onclick="setMode('basic')">
-        <i data-lucide="check-square"></i><span>BASIC</span>
-    </button>
-    <button class="nav-btn pro-btn" id="btnPro" onclick="setMode('pro')">
-        <i data-lucide="zap"></i><span>PRO</span>
-    </button>
-    <button class="nav-btn" id="btnEdit" onclick="setMode('edit')">
-        <i data-lucide="table"></i><span>ARKUSZ</span>
-    </button>
-    <button class="nav-btn" onclick="newPlan()">
-        <i data-lucide="plus-circle"></i><span>NOWY</span>
-    </button>
-    <button class="nav-btn" onclick="resetWeek()">
-        <i data-lucide="rotate-ccw"></i><span>RESET</span>
-    </button>
-    <button class="nav-btn" onclick="openExport()">
-        <i data-lucide="share-2"></i><span>ZAPISZ</span>
-    </button>
-    <button class="nav-btn" onclick="openImport()">
-        <i data-lucide="download"></i><span>IMPORT</span>
-    </button>
-    <!-- DODAJ TE PRZYCISKI W NAV W INDEX.HTML -->
-<button class="nav-btn" onclick="toggleAdminMode()">
-    <i data-lucide="shield"></i><span>TRENER</span>
-</button>
-<button class="nav-btn" onclick="setPlanAccessKey()">
-    <i data-lucide="lock"></i><span>NADAJ KOD</span>
-</button>
-<button class="nav-btn" onclick="unlockPlanWithKey()">
-    <i data-lucide="key"></i><span>KOD PLANU</span>
-</button>
-<button class="btn btn-danger" onclick="deleteCurrentPlan()">
-    <i data-lucide="trash-2"></i> Usuń Plan
-</button>
-</nav>
-
-<!-- MODALE -->
-<div class="modal" id="aboutModal">
-    <div class="modal-box">
-        <h3>Koziar Gym Plans</h3>
-        <p style="color:var(--text-dim); font-size:13px; line-height:1.6; text-align:center;">
-            Aplikacja treningowa stworzona z myślą o pełnej elastyczności, śledzeniu ciężaru i wygodnej progresji siłowej.
-        </p>
-        <button class="activate-btn" onclick="closeModals()" style="margin-top:15px;">ZAMKNIJ</button>
+    <!-- MODAL EKSPORTU I NADAWANIA KODU -->
+    <div id="exportModal" class="modal">
+        <div class="modal-content">
+            <h3>Udostępnianie i Eksport</h3>
+            <p id="exportKeyInfo" style="font-weight: bold; color: #4F46E5;"></p>
+            
+            <textarea id="exportText" readonly></textarea>
+            
+            <div class="modal-actions" style="flex-wrap: wrap; gap: 8px;">
+                <button class="btn btn-primary" onclick="setPlanAccessKey()">Nadaj Kod (Trener)</button>
+                <button class="btn" onclick="downloadTSV()">Pobierz TSV</button>
+                <button class="btn" onclick="closeModals()">Zamknij</button>
+            </div>
+        </div>
     </div>
-</div>
 
-<div class="modal" id="importModal">
-    <div class="modal-box">
-        <h3>Importuj Plan (TSV / Excel)</h3>
-        <input type="file" id="importFile" accept=".tsv,.txt,.csv" onchange="handleFileSelect(event)" style="margin-bottom:12px; font-size:12px; color:#aaa; width:100%;">
-        <textarea id="importText" style="width:100%; height:130px; background:#000; border:1px solid var(--border); color:#fff; border-radius:10px; padding:10px; font-size:11px" placeholder="Wklej zawartość pliku TSV..."></textarea>
-        <button class="btn-add-row" onclick="applyImport()">IMPORTUJ PLAN</button>
-        <button class="btn-add-row" onclick="closeModals()" style="color:#666; border-color:#333;">ANULUJ</button>
-    </div>
-</div>
-
-<div class="modal" id="exportModal">
-    <div class="modal-box">
-        <h3>Eksportuj Plan</h3>
-        <textarea id="exportText" style="width:100%; height:140px; background:#000; border:1px solid var(--border); color:#26a641; font-family:monospace; font-size:11px; border-radius:10px; padding:10px" readonly></textarea>
-        <button class="btn-add-row" onclick="downloadTSV()">POBIERZ PLIK .TSV</button>
-        <button class="btn-add-row" onclick="closeModals()" style="color:#666; border-color:#333;">ZAMKNIJ</button>
-    </div>
-</div>
-
-<!-- SKRYPT JEST TYLKO W TYM MIEJSCU -->
-<script src="script.js"></script>
 </body>
 </html>
