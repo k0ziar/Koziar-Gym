@@ -743,14 +743,14 @@ function downloadXLSXStyled() {
 
     const rawData = p.data || [];
 
-    // Przypisanie kolorów w standardzie wczytywanym przez Excel, LibreOffice i OpenOffice
-    const COLOR_GOLD_HEADER = "#E5B024"; // Złoty główny (jak w Twojej tabeli)
-    const COLOR_DAY_ACTIVE = "#F1C232";  // Jasny złoty dla aktywnego dnia
-    const COLOR_DAY_REST = "#666666";    // Szary dla dni REST
+    // Kolory MSO zgodne z Excel / OpenOffice / LibreOffice
+    const COLOR_GOLD_HEADER = "#E5B024"; 
+    const COLOR_DAY_ACTIVE = "#F1C232";  
+    const COLOR_DAY_REST = "#666666";    
     const COLOR_TEXT_DARK = "#000000";
     const COLOR_TEXT_LIGHT = "#FFFFFF";
-    const COLOR_ROW_ALT = "#EFEFEF";    // Delikatny szary na co drugi wiersz
-    const COLOR_BORDER = "#000000";     // Wyraźne czarne obramowanie
+    const COLOR_ROW_ALT = "#EFEFEF";    
+    const COLOR_BORDER = "#000000";     
 
     let htmlContent = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -774,13 +774,22 @@ function downloadXLSXStyled() {
     <body style="background-color:#ffffff; font-family:Arial, sans-serif;">
         <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse; border:1px solid ${COLOR_BORDER}; font-family:Arial, sans-serif; font-size:10pt;">
             
-            <!-- WIERSZ GLÓWNY NAGŁÓWKOWY (ZŁOTY) -->
+            <!-- DEFINICJA SZEROKOŚCI KOLUMN (Brak zawijania + zapas miejsca) -->
+            <colgroup>
+                <col width="50" style="width:50px;" />
+                <col width="320" style="width:320px;" />
+                <col width="50" style="width:50px;" />
+                <col width="80" style="width:80px;" />
+                <col width="60" style="width:60px;" />
+            </colgroup>
+
+            <!-- WIERSZ GŁÓWNY NAGŁÓWKOWY (ZŁOTY) -->
             <tr style="background-color:${COLOR_GOLD_HEADER}; font-weight:bold; color:${COLOR_TEXT_DARK};">
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER};">Nr</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${COLOR_GOLD_HEADER};">Ćwiczenie</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER};">S</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER};">P</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER};">KG</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; white-space:nowrap;">Nr</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${COLOR_GOLD_HEADER}; white-space:nowrap;">Ćwiczenie</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; white-space:nowrap;">S</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; white-space:nowrap;">P</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; white-space:nowrap;">KG</td>
             </tr>
     `;
 
@@ -802,13 +811,13 @@ function downloadXLSXStyled() {
 
             htmlContent += `
                 <tr style="background-color:${bgDay}; font-weight:bold; color:${textDay};">
-                    <td colspan="2" style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgDay}; color:${textDay}; font-weight:bold;">${dayTitle.toUpperCase()}</td>
+                    <td colspan="2" style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgDay}; color:${textDay}; font-weight:bold; white-space:nowrap;">${dayTitle.toUpperCase()}</td>
                     <td style="border:1px solid ${COLOR_BORDER}; background-color:${bgDay};"></td>
                     <td style="border:1px solid ${COLOR_BORDER}; background-color:${bgDay};"></td>
                     <td style="border:1px solid ${COLOR_BORDER}; background-color:${bgDay};"></td>
                 </tr>
             `;
-            dataRowCounter = 0; // Reset licznika dla alternatywnych kolorów
+            dataRowCounter = 0;
         } 
         // POMIJA POWTÓRZONE NAGŁÓWKI DANYCH W KODZIE
         else if (col0.toLowerCase() === 'nr' || col1.toLowerCase() === 'ćwiczenie') {
@@ -817,15 +826,15 @@ function downloadXLSXStyled() {
         // WIERSZE DANYCH (ĆWICZENIA)
         else {
             const bgRow = (dataRowCounter % 2 === 1) ? COLOR_ROW_ALT : "#FFFFFF";
-            const isSubRow = col0.includes('.'); // Podserie np 1.1, 1.2
+            const isSubRow = col0.includes('.');
 
             htmlContent += `
                 <tr style="background-color:${bgRow};">
-                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; ${isSubRow ? 'font-size:9pt; color:#555;' : ''}">${row[0] || ''}</td>
-                    <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgRow}; font-weight:${isSubRow ? 'normal' : 'bold'};">${row[1] || ''}</td>
-                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow};">${row[2] || ''}</td>
-                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow};">${row[3] || ''}</td>
-                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow};">${row[4] || ''}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap; ${isSubRow ? 'font-size:9pt; color:#555;' : ''}">${row[0] || ''}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgRow}; white-space:nowrap; font-weight:${isSubRow ? 'normal' : 'bold'};">${row[1] || ''}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${row[2] || ''}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${row[3] || ''}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${row[4] || ''}</td>
                 </tr>
             `;
             dataRowCounter++;
