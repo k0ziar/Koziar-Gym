@@ -743,7 +743,7 @@ function downloadXLSXStyled() {
 
     const rawData = p.data || [];
 
-    // Kolory MSO zgodne z Excel / OpenOffice / LibreOffice
+    // Kolory zgodne z silnikami MS Excel / OpenOffice / LibreOffice
     const COLOR_GOLD_HEADER = "#E5B024"; 
     const COLOR_DAY_ACTIVE = "#F1C232";  
     const COLOR_DAY_REST = "#666666";    
@@ -770,26 +770,30 @@ function downloadXLSXStyled() {
             </x:ExcelWorkbook>
         </xml>
         <![endif]-->
+        <style>
+            br { mso-data-placement: same-cell; }
+            td { mso-number-format:"\\@"; white-space: nowrap; }
+        </style>
     </head>
     <body style="background-color:#ffffff; font-family:Arial, sans-serif;">
-        <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse; border:1px solid ${COLOR_BORDER}; font-family:Arial, sans-serif; font-size:10pt;">
+        <table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse; border:1px solid ${COLOR_BORDER}; font-family:Arial, sans-serif; font-size:10pt;">
             
-            <!-- DEFINICJA SZEROKOŚCI KOLUMN (Brak zawijania + zapas miejsca) -->
+            <!-- PRZYMUSOWE SZEROKOŚCI KOLUMN DLA EXCELA I OPENOFFICE -->
             <colgroup>
-                <col width="50" style="width:50px;" />
-                <col width="320" style="width:320px;" />
-                <col width="50" style="width:50px;" />
-                <col width="80" style="width:80px;" />
-                <col width="60" style="width:60px;" />
+                <col width="60" style="width:60pt; mso-width-source:userset;" />
+                <col width="350" style="width:350pt; mso-width-source:userset;" />
+                <col width="60" style="width:60pt; mso-width-source:userset;" />
+                <col width="90" style="width:90pt; mso-width-source:userset;" />
+                <col width="70" style="width:70pt; mso-width-source:userset;" />
             </colgroup>
 
             <!-- WIERSZ GŁÓWNY NAGŁÓWKOWY (ZŁOTY) -->
-            <tr style="background-color:${COLOR_GOLD_HEADER}; font-weight:bold; color:${COLOR_TEXT_DARK};">
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; white-space:nowrap;">Nr</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${COLOR_GOLD_HEADER}; white-space:nowrap;">Ćwiczenie</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; white-space:nowrap;">S</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; white-space:nowrap;">P</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; white-space:nowrap;">KG</td>
+            <tr height="30" style="height:30pt; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; color:${COLOR_TEXT_DARK};">
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; white-space:nowrap;">Nr</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; white-space:nowrap;">Ćwiczenie</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; white-space:nowrap;">S</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; white-space:nowrap;">P</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; white-space:nowrap;">KG</td>
             </tr>
     `;
 
@@ -810,7 +814,7 @@ function downloadXLSXStyled() {
             const textDay = isRest ? COLOR_TEXT_LIGHT : COLOR_TEXT_DARK;
 
             htmlContent += `
-                <tr style="background-color:${bgDay}; font-weight:bold; color:${textDay};">
+                <tr height="25" style="height:25pt; background-color:${bgDay}; font-weight:bold; color:${textDay};">
                     <td colspan="2" style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgDay}; color:${textDay}; font-weight:bold; white-space:nowrap;">${dayTitle.toUpperCase()}</td>
                     <td style="border:1px solid ${COLOR_BORDER}; background-color:${bgDay};"></td>
                     <td style="border:1px solid ${COLOR_BORDER}; background-color:${bgDay};"></td>
@@ -829,7 +833,7 @@ function downloadXLSXStyled() {
             const isSubRow = col0.includes('.');
 
             htmlContent += `
-                <tr style="background-color:${bgRow};">
+                <tr height="22" style="height:22pt; background-color:${bgRow};">
                     <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap; ${isSubRow ? 'font-size:9pt; color:#555;' : ''}">${row[0] || ''}</td>
                     <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgRow}; white-space:nowrap; font-weight:${isSubRow ? 'normal' : 'bold'};">${row[1] || ''}</td>
                     <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${row[2] || ''}</td>
@@ -841,7 +845,13 @@ function downloadXLSXStyled() {
         }
     });
 
+    // ZNAK WODNY NA SAMYM DOLE TABELI
     htmlContent += `
+            <tr height="25" style="height:25pt; background-color:#1a1a1a;">
+                <td colspan="5" style="border:1px solid ${COLOR_BORDER}; background-color:#1a1a1a; color:${COLOR_GOLD_HEADER}; text-align:center; font-size:9pt; font-weight:bold; white-space:nowrap;">
+                    ⚡ Wygenerowano za pomocą aplikacji KOZIAR FIT ⚡
+                </td>
+            </tr>
         </table>
     </body>
     </html>
