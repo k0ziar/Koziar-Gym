@@ -30,7 +30,7 @@ var hiddenPlans = JSON.parse(localStorage.getItem('koziar_hidden_plans')) || [];
 var defaultPlans = {
     "FBW 3-Dniowy (Domyślny) - by Koziar": {
         isLocked: true,
-        notes: "Gryf długi 20kg\nGryf krótki 15kg\nGryfy łamane 10kg\n\nPo zmianie prostego chwytu na warkocz w tricepsie, wyniki drastically skoczyły w górę\nPrzysiad na smithie 170x2 nie pełny zakres\nMartwy 190x1 PR - technika do poprawy",
+        notes: "Gryf długi 20kg\nGryf krótki 15kg\nGryfy łamane 10kg\n\nPo zmianie prostego chwytu na warkocz w tricepsie, wyniki drastycznie skoczyły w górę\nPrzysiad na smithie 170x2 nie pełny zakres\nMartwy 190x1 PR - technika do poprawy",
         data: [
             ["Dzień 1 - PUSH", "", "", "", "", "", ""],
             ["Nr", "Ćwiczenie", "S", "P", "KG", "RIR", "REST"],
@@ -737,65 +737,187 @@ function resetWeek() {
     }
 }
 
-// ZAAWANSOWANY EKSPORT PLANU DO ZASTYLIZOWANEGO EXCELA (.XLSX)
+// STYLIZOWANY EXPORT HTML/XLSX DLA EXCELA
 function downloadXLSXStyled() {
-    if (typeof XLSX === 'undefined') {
-        alert("Biblioteka XLSX jeszcze się ładuje. Spróbuj za chwilę!");
-        return;
-    }
-
     const p = plans[currentPlan];
     if (!p) return;
 
     const rawData = p.data || [];
-    let aoa = [];
+    
+    let htmlContent = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+        <meta charset="utf-8">
+        <!--[if gte mso 9]>
+        <xml>
+            <x:ExcelWorkbook>
+                <x:ExcelWorksheets>
+                    <x:ExcelWorksheet>
+                        <x:Name>Plan Treningowy</x:Name>
+                        <x:WorksheetOptions>
+                            <x:DisplayGridlines/>
+                        </x:WorksheetOptions>
+                    </x:ExcelWorksheet>
+                </x:ExcelWorksheets>
+            </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+        <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #0d0d0d; color: #ffffff; }
+            table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+            th, td { border: 1px solid #242424; padding: 10px; text-align: center; }
+            
+            /* BANER GŁÓWNY KOZIAR FIT */
+            .banner-row td {
+                background-color: #000000;
+                color: #d4af37;
+                font-size: 18px;
+                font-weight: bold;
+                text-align: center;
+                padding: 15px;
+                border: 2px solid #d4af37;
+            }
+            .subtitle-row td {
+                background-color: #121212;
+                color: #a0a0a0;
+                font-size: 11px;
+                text-align: center;
+                padding: 6px;
+            }
 
-    // BANNER GŁÓWNY / ZNAK WODNY GÓRNY
-    aoa.push(["⚡ KOZIAR FIT - PLAN TRENINGOWY"]);
-    aoa.push([`PLAN: ${currentPlan.toUpperCase()}`]);
-    aoa.push([`WYGENEROWANO: ${new Date().toLocaleDateString('pl-PL')} | APLIKACJA KOZIAR FIT`]);
-    aoa.push([]); // Pusta linia
+            /* NOTATKI */
+            .notes-header td {
+                background-color: #1a1a1a;
+                color: #d4af37;
+                font-weight: bold;
+                text-align: left;
+                font-size: 12px;
+            }
+            .notes-cell td {
+                background-color: #121212;
+                color: #ffffff;
+                text-align: left;
+                font-size: 11px;
+            }
 
+            /* DZIEŃ TRENINGOWY (NAGŁÓWEK SEKCI) */
+            .day-header-row td {
+                background-color: #1c1a0e;
+                color: #ffd700;
+                font-size: 14px;
+                font-weight: bold;
+                text-align: left;
+                border-top: 2px solid #d4af37;
+                border-bottom: 2px solid #d4af37;
+                padding: 10px;
+            }
+
+            /* NAGŁÓWKI TABELI (Nr, Ćwiczenie, S, P, KG itp.) */
+            .table-header-row td {
+                background-color: #181818;
+                color: #d4af37;
+                font-weight: bold;
+                font-size: 12px;
+                text-transform: uppercase;
+            }
+
+            /* WIERSZE Z CWIECZENIAMI */
+            .data-row td {
+                background-color: #121212;
+                color: #ffffff;
+                font-size: 12px;
+            }
+            .data-row-alt td {
+                background-color: #161616;
+                color: #ffffff;
+                font-size: 12px;
+            }
+            .exercise-name {
+                text-align: left !important;
+                font-weight: bold;
+            }
+
+            /* STOPKA ZNAK WODNY */
+            .footer-row td {
+                background-color: #000000;
+                color: #d4af37;
+                font-size: 11px;
+                font-weight: bold;
+                text-align: center;
+                padding: 10px;
+                border-top: 1px solid #d4af37;
+            }
+        </style>
+    </head>
+    <body>
+        <table>
+            <!-- BANER CZAJĄCY MARKI -->
+            <tr class="banner-row">
+                <td colspan="7">⚡ KOZIAR FIT — PLAN TRENINGOWY ⚡</td>
+            </tr>
+            <tr class="subtitle-row">
+                <td colspan="7">PLAN: ${currentPlan.toUpperCase()} | WYGENEROWANO: ${new Date().toLocaleDateString('pl-PL')}</td>
+            </tr>
+            <tr><td colspan="7" style="background:#0d0d0d; border:none; height:10px;"></td></tr>
+    `;
+
+    // ADD NOTES
     if (p.notes && p.notes.trim()) {
-        aoa.push(["📌 NOTATKI DO PLANU:"]);
-        p.notes.split('\n').forEach(line => {
-            aoa.push([line]);
-        });
-        aoa.push([]); // Pusta linia
+        htmlContent += `
+            <tr class="notes-header"><td colspan="7">📌 NOTATKI DO PLANU:</td></tr>
+            <tr class="notes-cell"><td colspan="7">${p.notes.replace(/\n/g, '<br>')}</td></tr>
+            <tr><td colspan="7" style="background:#0d0d0d; border:none; height:10px;"></td></tr>
+        `;
     }
 
-    // WSTAWIANIE I PRZEKSZTAŁCANIE WIERSZY TABELI
-    rawData.forEach(row => {
-        aoa.push([...row]);
+    // PRZETWARZANIE TABELI DANYCH
+    let rowCounter = 0;
+    rawData.forEach((row) => {
+        if (!row || row.every(c => c === null || c === '')) return;
+
+        const col0 = String(row[0] || '').trim();
+        const col1 = String(row[1] || '').trim();
+
+        if (col0.toLowerCase().startsWith('dzień') || (col0 && !col1 && isNaN(col0))) {
+            const title = col1 ? `${col0} - ${col1}` : col0;
+            htmlContent += `
+                <tr><td colspan="7" style="background:#0d0d0d; border:none; height:10px;"></td></tr>
+                <tr class="day-header-row"><td colspan="7">💪 ${title.toUpperCase()}</td></tr>
+            `;
+        } else if (col0.toLowerCase() === 'nr' || col1.toLowerCase() === 'ćwiczenie') {
+            htmlContent += `<tr class="table-header-row">`;
+            row.forEach(cell => {
+                htmlContent += `<td>${cell || ''}</td>`;
+            });
+            htmlContent += `</tr>`;
+        } else {
+            const rowClass = (rowCounter % 2 === 0) ? 'data-row' : 'data-row-alt';
+            htmlContent += `<tr class="${rowClass}">`;
+            row.forEach((cell, idx) => {
+                const alignClass = (idx === 1) ? 'class="exercise-name"' : '';
+                htmlContent += `<td ${alignClass}>${cell !== null && cell !== undefined ? cell : ''}</td>`;
+            });
+            htmlContent += `</tr>`;
+            rowCounter++;
+        }
     });
 
-    // STOPKA / ZNAK WODNY DOLNY
-    aoa.push([]);
-    aoa.push(["--------------------------------------------------"]);
-    aoa.push(["🔥 Wygenerowano w aplikacji KOZIAR FIT - Bądź nie do zatrzymania!"]);
-    aoa.push(["Oficjalny partner treningowy | Wszelkie prawa zastrzeżone"]);
+    // DOLNY ZNAK WODNY KOZIAR FIT
+    htmlContent += `
+            <tr><td colspan="7" style="background:#0d0d0d; border:none; height:15px;"></td></tr>
+            <tr class="footer-row">
+                <td colspan="7">🔥 Wygenerowano w aplikacji KOZIAR FIT — Bądź nie do zatrzymania! 🔥</td>
+            </tr>
+        </table>
+    </body>
+    </html>
+    `;
 
-    const worksheet = XLSX.utils.aoa_to_sheet(aoa);
-
-    // AUTO-DOPASOWANIE SZEROKOŚCI KOLUMN
-    let colWidths = [];
-    aoa.forEach(row => {
-        row.forEach((cellVal, colIdx) => {
-            const strVal = cellVal ? String(cellVal) : "";
-            // Nie bierzemy pod uwagę bardzo długich znaków wodnych przy wyliczaniu szerokości kolumn
-            if (strVal.length < 40) {
-                colWidths[colIdx] = Math.max(colWidths[colIdx] || 10, strVal.length + 4);
-            }
-        });
-    });
-
-    worksheet['!cols'] = colWidths.map(w => ({ wch: Math.min(Math.max(w, 10), 45) }));
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Plan Treningowy");
-
-    const fileName = "KOZIAR_FIT_" + currentPlan.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".xlsx";
-    XLSX.writeFile(workbook, fileName);
+    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = "KOZIAR_FIT_" + currentPlan.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".xls";
+    link.click();
 }
 
 function downloadTSV() {
