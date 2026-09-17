@@ -487,39 +487,63 @@ function updateCellDirectly(rowIndex, colIndex, value) {
     renderGymView();
 }
 
-function reorderExercisesInDay(targetRowIdx, newNrVal) {
-    const sheetData = plans[currentPlan].data;
-    const targetNr = parseFloat(newNrVal);
-    if (isNaN(targetNr)) return;
+function reorderAndRenumberPlan(planData) {
+    let currentDayIndex = -1;
+    let days = [];
 
-    let dayStart = targetRowIdx;
-    while (dayStart > 0 && !String(sheetData[dayStart][0]).toLowerCase().startsWith('dzień')) {
-        dayStart--;
-    }
+    // 1. Podział danych na poszczególne dni
+    planData.forEach(row => {
+        if (!row) return;
+        const col0 = String(row[0] || '').trim();
+        const col1 = String(row[1] || '').trim();
 
-    let dayEnd = targetRowIdx;
-    while (dayEnd < sheetData.length - 1 && !String(sheetData[dayEnd + 1][0]).toLowerCase().startsWith('dzień')) {
-        dayEnd++;
-    }
-
-    let exRows = [];
-    for (let i = dayStart; i <= dayEnd; i++) {
-        const nr = parseFloat(sheetData[i][0]);
-        if (!isNaN(nr)) {
-            exRows.push(sheetData[i]);
+        // Wykrywanie nagłówka dnia
+        if (col0.toLowerCase().startsWith('dzień') || (col0 && !col1 && isNaN(col0))) {
+            currentDayIndex++;
+            days[currentDayIndex] = { header: row, exercises: [] };
+        } else if (currentDayIndex >= 0) {
+            days[currentDayIndex].exercises.push(row);
         }
-    }
+    });
 
-    exRows.sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
+    // 2. Sortowanie i przenumerowywanie NIEZALEŻNIE w każdym dniu
+    let newFullData = [];
 
-    let exCounter = 0;
-    for (let i = dayStart; i <= dayEnd; i++) {
-        const isExRow = !isNaN(parseFloat(sheetData[i][0]));
-        if (isExRow && exRows[exCounter]) {
-            sheetData[i] = exRows[exCounter];
-            exCounter++;
-        }
-    }
+    days.forEach(day => {
+        newFullData.push(day.header); // Dodajemy nagłówek dnia
+
+        // Główne ćwiczenia (np. 1, 2, 8) i ich podserie (1.1, 1.2)
+        let mainCounter = 1;
+        
+        // Sortujemy ćwiczenia według wprowadzonego numeru (tylko liczby całkowite)
+        day.exercises.sort((a, b) => {
+            let numA = parseFloat(a[0]) || 0;
+            let numB = parseFloat(b[0]) || 0;
+            return numA - numB;
+        });
+
+        let currentMainNum = 0;
+        let subCounter = 1;
+
+        day.exercises.forEach(exRow => {
+            let numStr = String(exRow[0] || '');
+
+            // Jeśli to podseria (np. zawiera kropkę lub była podserią)
+            if (numStr.includes('.')) {
+                exRow[0] = `${currentMainNum}.${subCounter}`;
+                subCounter++;
+            } else {
+                // Nowe główne ćwiczenie
+                currentMainNum = mainCounter;
+                exRow[0] = String(mainCounter);
+                mainCounter++;
+                subCounter = 1; // reset podserii
+            }
+            newFullData.push(exRow);
+        });
+    });
+
+    return newFullData;
 }
 
 function updateSubSetCellDirectly(parentRowIndex, setIdx, headerName, value) {
@@ -855,9 +879,11 @@ function downloadXLSXStyled() {
         // WIERSZE Z ĆWICZENIAMI / SERIAMI
         else {
             const bgRow = (dataRowCounter % 2 === 1) ? COLOR_ROW_ALT : "#FFFFFF";
-            const isSubRow = col0.includes('.'); // Wykrywa serie typu 1.1, 1.2
+            
+            // Wykrywanie podserii (kropka w numerze LUB dopisek "(Seria" w nazwie)
+            const isSubRow = col0.includes('.') || col1.toLowerCase().includes('(seria');
 
-            // JEŚLI SUBROW -> PUSTA KOMÓRKA DLA NAZWY ĆWICZENIA ZAMIAST DŁUGIEGO TEKSTU
+            // CZYŚCIMY NAZWĘ: Jeśli to podseria, komórka na nazwę ma być ABSOLUTNIE PUSTA
             const exerciseNameDisplay = isSubRow ? '' : (row[1] || '');
 
             htmlContent += `
