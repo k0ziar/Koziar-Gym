@@ -742,12 +742,20 @@ function downloadXLSXStyled() {
     if (!p) return;
 
     const rawData = p.data || [];
-    
-    // Zbiór stylów zgodnych z silnikiem Microsoft Excel (MSO)
+
+    // Przypisanie kolorów w standardzie wczytywanym przez Excel, LibreOffice i OpenOffice
+    const COLOR_GOLD_HEADER = "#E5B024"; // Złoty główny (jak w Twojej tabeli)
+    const COLOR_DAY_ACTIVE = "#F1C232";  // Jasny złoty dla aktywnego dnia
+    const COLOR_DAY_REST = "#666666";    // Szary dla dni REST
+    const COLOR_TEXT_DARK = "#000000";
+    const COLOR_TEXT_LIGHT = "#FFFFFF";
+    const COLOR_ROW_ALT = "#EFEFEF";    // Delikatny szary na co drugi wiersz
+    const COLOR_BORDER = "#000000";     // Wyraźne czarne obramowanie
+
     let htmlContent = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
     <head>
-        <meta charset="utf-8">
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
         <!--[if gte mso 9]>
         <xml>
             <x:ExcelWorkbook>
@@ -762,165 +770,69 @@ function downloadXLSXStyled() {
             </x:ExcelWorkbook>
         </xml>
         <![endif]-->
-        <style>
-            table {
-                border-collapse: collapse;
-                font-family: 'Segoe UI', Arial, sans-serif;
-            }
-            td, th {
-                vertical-align: middle;
-                padding: 6px 10px;
-            }
-            
-            /* BANER GŁÓWNY */
-            .banner-title {
-                background-color: #1a1a1a;
-                color: #d4af37;
-                font-size: 16pt;
-                font-weight: bold;
-                text-align: center;
-                border: 2pt solid #d4af37;
-            }
-            .banner-sub {
-                background-color: #f2f2f2;
-                color: #555555;
-                font-size: 9pt;
-                text-align: center;
-                border-bottom: 1pt solid #cccccc;
-            }
-
-            /* NOTATKI */
-            .notes-head {
-                background-color: #f8f9fa;
-                color: #b8860b;
-                font-weight: bold;
-                font-size: 10pt;
-                border: 1pt solid #dcdcdc;
-            }
-            .notes-body {
-                background-color: #ffffff;
-                color: #333333;
-                font-size: 9.5pt;
-                border: 1pt solid #dcdcdc;
-                white-space: pre-wrap;
-            }
-
-            /* SEKCJA DNI (NAGŁÓWEK DZIEŃ) */
-            .day-title {
-                background-color: #262626;
-                color: #ffd700;
-                font-size: 12pt;
-                font-weight: bold;
-                text-align: left;
-                border-top: 2pt solid #d4af37;
-                border-bottom: 2pt solid #d4af37;
-            }
-
-            /* NAGŁÓWKI TABELI (Nr, Ćwiczenie, S, P, KG) */
-            .col-header {
-                background-color: #d4af37;
-                color: #000000;
-                font-weight: bold;
-                font-size: 10pt;
-                text-align: center;
-                border: 1pt solid #b8860b;
-            }
-
-            /* DANIE W TABELI (CZIWECZENIA) */
-            .cell-data {
-                background-color: #ffffff;
-                color: #111111;
-                font-size: 10pt;
-                text-align: center;
-                border: 1pt solid #e0e0e0;
-            }
-            .cell-data-alt {
-                background-color: #f9f9f9;
-                color: #111111;
-                font-size: 10pt;
-                text-align: center;
-                border: 1pt solid #e0e0e0;
-            }
-            .cell-ex-name {
-                text-align: left !important;
-                font-weight: bold;
-            }
-
-            /* FOOTER */
-            .footer-cell {
-                background-color: #1a1a1a;
-                color: #d4af37;
-                font-size: 9pt;
-                font-weight: bold;
-                text-align: center;
-                border-top: 1.5pt solid #d4af37;
-            }
-        </style>
     </head>
-    <body>
-        <table>
-            <!-- NAGŁÓWEK MARKI -->
-            <tr>
-                <td colspan="7" class="banner-title">⚡ KOZIAR FIT — PLAN TRENINGOWY ⚡</td>
+    <body style="background-color:#ffffff; font-family:Arial, sans-serif;">
+        <table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse; border:1px solid ${COLOR_BORDER}; font-family:Arial, sans-serif; font-size:10pt;">
+            
+            <!-- WIERSZ GLÓWNY NAGŁÓWKOWY (ZŁOTY) -->
+            <tr style="background-color:${COLOR_GOLD_HEADER}; font-weight:bold; color:${COLOR_TEXT_DARK};">
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER};">Nr</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${COLOR_GOLD_HEADER};">Ćwiczenie</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER};">S</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER};">P</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER};">KG</td>
             </tr>
-            <tr>
-                <td colspan="7" class="banner-sub">PLAN: ${currentPlan.toUpperCase()} | DATA EXPORTU: ${new Date().toLocaleDateString('pl-PL')}</td>
-            </tr>
-            <tr><td colspan="7"></td></tr>
     `;
 
-    // SEKCIJA NOTATEK
-    if (p.notes && p.notes.trim()) {
-        htmlContent += `
-            <tr><td colspan="7" class="notes-head">📌 NOTATKI DO PLANU:</td></tr>
-            <tr><td colspan="7" class="notes-body">${p.notes.replace(/\n/g, '<br>')}</td></tr>
-            <tr><td colspan="7"></td></tr>
-        `;
-    }
+    let dataRowCounter = 0;
 
-    // ITERACJA PO WIERSZACH PLANU
-    let rowCounter = 0;
     rawData.forEach((row) => {
         if (!row || row.every(c => c === null || c === '')) return;
 
         const col0 = String(row[0] || '').trim();
         const col1 = String(row[1] || '').trim();
 
-        // Sprawdzanie czy to nagłówek dnia
+        const isRest = col0.toLowerCase().includes('rest') || col1.toLowerCase().includes('rest');
+
+        // NAGŁÓWEK DZIEŃ (NP. DZIEŃ 1 - FBW A / DZIEŃ 2 REST)
         if (col0.toLowerCase().startsWith('dzień') || (col0 && !col1 && isNaN(col0))) {
-            const title = col1 ? `${col0} - ${col1}` : col0;
+            const dayTitle = col1 ? `${col0} ${col1}` : col0;
+            const bgDay = isRest ? COLOR_DAY_REST : COLOR_DAY_ACTIVE;
+            const textDay = isRest ? COLOR_TEXT_LIGHT : COLOR_TEXT_DARK;
+
             htmlContent += `
-                <tr><td colspan="7"></td></tr>
-                <tr><td colspan="7" class="day-title">💪 ${title.toUpperCase()}</td></tr>
+                <tr style="background-color:${bgDay}; font-weight:bold; color:${textDay};">
+                    <td colspan="2" style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgDay}; color:${textDay}; font-weight:bold;">${dayTitle.toUpperCase()}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; background-color:${bgDay};"></td>
+                    <td style="border:1px solid ${COLOR_BORDER}; background-color:${bgDay};"></td>
+                    <td style="border:1px solid ${COLOR_BORDER}; background-color:${bgDay};"></td>
+                </tr>
             `;
+            dataRowCounter = 0; // Reset licznika dla alternatywnych kolorów
         } 
-        // Sprawdzanie czy to wiersz kolumn (Nr, Ćwiczenie, S, P, KG...)
+        // POMIJA POWTÓRZONE NAGŁÓWKI DANYCH W KODZIE
         else if (col0.toLowerCase() === 'nr' || col1.toLowerCase() === 'ćwiczenie') {
-            htmlContent += `<tr>`;
-            row.forEach(cell => {
-                htmlContent += `<td class="col-header">${cell || ''}</td>`;
-            });
-            htmlContent += `</tr>`;
+            return;
         } 
-        // Zwykły wiersz z ćwiczeniem
+        // WIERSZE DANYCH (ĆWICZENIA)
         else {
-            const bgClass = (rowCounter % 2 === 0) ? 'cell-data' : 'cell-data-alt';
-            htmlContent += `<tr>`;
-            row.forEach((cell, idx) => {
-                const alignClass = (idx === 1) ? `${bgClass} cell-ex-name` : bgClass;
-                htmlContent += `<td class="${alignClass}">${cell !== null && cell !== undefined ? cell : ''}</td>`;
-            });
-            htmlContent += `</tr>`;
-            rowCounter++;
+            const bgRow = (dataRowCounter % 2 === 1) ? COLOR_ROW_ALT : "#FFFFFF";
+            const isSubRow = col0.includes('.'); // Podserie np 1.1, 1.2
+
+            htmlContent += `
+                <tr style="background-color:${bgRow};">
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; ${isSubRow ? 'font-size:9pt; color:#555;' : ''}">${row[0] || ''}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgRow}; font-weight:${isSubRow ? 'normal' : 'bold'};">${row[1] || ''}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow};">${row[2] || ''}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow};">${row[3] || ''}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow};">${row[4] || ''}</td>
+                </tr>
+            `;
+            dataRowCounter++;
         }
     });
 
-    // ZNAK WODNY W FOOTERZE
     htmlContent += `
-            <tr><td colspan="7"></td></tr>
-            <tr>
-                <td colspan="7" class="footer-cell">🔥 KOZIAR FIT — Bądź nie do zatrzymania! 🔥</td>
-            </tr>
         </table>
     </body>
     </html>
