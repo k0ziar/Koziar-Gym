@@ -743,7 +743,7 @@ function downloadXLSXStyled() {
 
     const rawData = p.data || [];
 
-    // Kolory zgodne z silnikami MS Excel / OpenOffice / LibreOffice
+    // Paleta kolorów MSO dla Excel / OpenOffice / LibreOffice
     const COLOR_GOLD_HEADER = "#E5B024"; 
     const COLOR_DAY_ACTIVE = "#F1C232";  
     const COLOR_DAY_REST = "#666666";    
@@ -778,7 +778,6 @@ function downloadXLSXStyled() {
     <body style="background-color:#ffffff; font-family:Arial, sans-serif;">
         <table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse; border:1px solid ${COLOR_BORDER}; font-family:Arial, sans-serif; font-size:10pt;">
             
-            <!-- PRZYMUSOWE SZEROKOŚCI KOLUMN DLA EXCELA I OPENOFFICE -->
             <colgroup>
                 <col width="60" style="width:60pt; mso-width-source:userset;" />
                 <col width="350" style="width:350pt; mso-width-source:userset;" />
@@ -787,13 +786,40 @@ function downloadXLSXStyled() {
                 <col width="70" style="width:70pt; mso-width-source:userset;" />
             </colgroup>
 
-            <!-- WIERSZ GŁÓWNY NAGŁÓWKOWY (ZŁOTY) -->
+            <!-- NAGŁÓWEK GŁÓWNY PLANU -->
             <tr height="30" style="height:30pt; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; color:${COLOR_TEXT_DARK};">
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; white-space:nowrap;">Nr</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; white-space:nowrap;">Ćwiczenie</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; white-space:nowrap;">S</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; white-space:nowrap;">P</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; white-space:nowrap;">KG</td>
+                <td colspan="5" style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-size:12pt; font-weight:bold; white-space:nowrap;">
+                    ⚡ PLAN: ${currentPlan.toUpperCase()} ⚡
+                </td>
+            </tr>
+    `;
+
+    // 1. NOTATKI NA SAMEJ GÓRZE PLANU (JEŚLI ISTNIEJĄ)
+    if (p.notes && p.notes.trim()) {
+        const formattedNotes = p.notes.replace(/\n/g, '<br>');
+        htmlContent += `
+            <tr height="20" style="height:20pt; background-color:#1a1a1a;">
+                <td colspan="5" style="border:1px solid ${COLOR_BORDER}; background-color:#1a1a1a; color:${COLOR_GOLD_HEADER}; font-weight:bold; font-size:9pt;">
+                    📌 NOTATKI DO PLANU:
+                </td>
+            </tr>
+            <tr>
+                <td colspan="5" style="border:1px solid ${COLOR_BORDER}; background-color:#f9f9f9; color:#333333; font-size:9.5pt; text-align:left; white-space:normal; padding:8px;">
+                    ${formattedNotes}
+                </td>
+            </tr>
+            <tr height="10"><td colspan="5" style="border:none; background-color:#ffffff;"></td></tr>
+        `;
+    }
+
+    // NAGŁÓWKI KOLUMN DANYCH
+    htmlContent += `
+            <tr height="25" style="height:25pt; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; color:${COLOR_TEXT_DARK};">
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold;">Nr</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${COLOR_GOLD_HEADER}; font-weight:bold;">Ćwiczenie</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold;">S</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold;">P</td>
+                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold;">KG</td>
             </tr>
     `;
 
@@ -807,7 +833,7 @@ function downloadXLSXStyled() {
 
         const isRest = col0.toLowerCase().includes('rest') || col1.toLowerCase().includes('rest');
 
-        // NAGŁÓWEK DZIEŃ (NP. DZIEŃ 1 - FBW A / DZIEŃ 2 REST)
+        // NAGŁÓWEK DZIEŃ (NP. DZIEŃ 1 - FBW A)
         if (col0.toLowerCase().startsWith('dzień') || (col0 && !col1 && isNaN(col0))) {
             const dayTitle = col1 ? `${col0} ${col1}` : col0;
             const bgDay = isRest ? COLOR_DAY_REST : COLOR_DAY_ACTIVE;
@@ -823,19 +849,21 @@ function downloadXLSXStyled() {
             `;
             dataRowCounter = 0;
         } 
-        // POMIJA POWTÓRZONE NAGŁÓWKI DANYCH W KODZIE
         else if (col0.toLowerCase() === 'nr' || col1.toLowerCase() === 'ćwiczenie') {
             return;
         } 
-        // WIERSZE DANYCH (ĆWICZENIA)
+        // WIERSZE Z ĆWICZENIAMI / SERIAMI
         else {
             const bgRow = (dataRowCounter % 2 === 1) ? COLOR_ROW_ALT : "#FFFFFF";
-            const isSubRow = col0.includes('.');
+            const isSubRow = col0.includes('.'); // Wykrywa serie typu 1.1, 1.2
+
+            // JEŚLI SUBROW -> PUSTA KOMÓRKA DLA NAZWY ĆWICZENIA ZAMIAST DŁUGIEGO TEKSTU
+            const exerciseNameDisplay = isSubRow ? '' : (row[1] || '');
 
             htmlContent += `
                 <tr height="22" style="height:22pt; background-color:${bgRow};">
-                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap; ${isSubRow ? 'font-size:9pt; color:#555;' : ''}">${row[0] || ''}</td>
-                    <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgRow}; white-space:nowrap; font-weight:${isSubRow ? 'normal' : 'bold'};">${row[1] || ''}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap; ${isSubRow ? 'font-size:8.5pt; color:#666666;' : ''}">${row[0] || ''}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgRow}; white-space:nowrap; font-weight:${isSubRow ? 'normal' : 'bold'};">${exerciseNameDisplay}</td>
                     <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${row[2] || ''}</td>
                     <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${row[3] || ''}</td>
                     <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${row[4] || ''}</td>
@@ -845,11 +873,12 @@ function downloadXLSXStyled() {
         }
     });
 
-    // ZNAK WODNY NA SAMYM DOLE TABELI
+    // 2. ZNAK WODNY NA SAMYM DOLE (AKTYWNY DLA KAŻDEJ KOLUMNY)
     htmlContent += `
-            <tr height="25" style="height:25pt; background-color:#1a1a1a;">
-                <td colspan="5" style="border:1px solid ${COLOR_BORDER}; background-color:#1a1a1a; color:${COLOR_GOLD_HEADER}; text-align:center; font-size:9pt; font-weight:bold; white-space:nowrap;">
-                    ⚡ Wygenerowano za pomocą aplikacji KOZIAR FIT ⚡
+            <tr height="12"><td colspan="5" style="border:none; background-color:#ffffff;"></td></tr>
+            <tr height="25" style="height:25pt; background-color:#111111;">
+                <td colspan="5" style="border:1px solid ${COLOR_BORDER}; background-color:#111111; color:${COLOR_GOLD_HEADER}; text-align:center; font-size:9pt; font-weight:bold; white-space:nowrap;">
+                    ⚡ Wygenerowano w aplikacji KOZIAR FIT ⚡
                 </td>
             </tr>
         </table>
