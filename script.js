@@ -399,7 +399,7 @@ function cancelExcelChanges() {
     setMode('basic');
 }
 
-// STRUKTURA PLANU (OBSŁUGA REST I NAGŁÓWKÓW)
+// STRUKTURA PLANU (Ulepszona obsługa REST)
 function parseSheetToStructure() {
     const raw = plans[currentPlan]?.data || [];
     let days = [];
@@ -484,7 +484,7 @@ function updateCellDirectly(rowIndex, colIndex, value) {
     renderGymView();
 }
 
-// AUTOMATYCZNE SORTOWANIE
+// AUTOMATYCZNE SORTOWANIE ZMIENIONYCH NUMERÓW
 function reorderExercisesInDay(targetRowIdx, newNrVal) {
     const sheetData = plans[currentPlan].data;
     const targetNr = parseFloat(newNrVal);
@@ -553,7 +553,7 @@ function updateSubSetCellDirectly(parentRowIndex, setIdx, headerName, value) {
     saveAll();
 }
 
-// POWIĄZANIA CHECKBOXÓW
+// LOGIKA INTELIGENTNYCH CHECKBOXÓW
 function toggleCheck(key, target, value, totalSubSets = 0) {
     if (!checks[key]) checks[key] = {};
 
@@ -662,7 +662,7 @@ function renderGymView() {
                                     const cellData = ex.data[h.name] || { val: '', colIdx: h.colIdx };
                                     return `
                                         <div class="col-cell">
-                                            <input type="text" class="cell-input" value="${cellData.val}" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex}, ${cellData.colIdx}, this.value)">
+                                            <input type="text" class="cell-input" value="${cellData.val}" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex},${cellData.colIdx}, this.value)">
                                         </div>
                                     `;
                                 }).join('')}
@@ -681,8 +681,7 @@ function renderGymView() {
                                             <input type="checkbox" ${subChecked ? 'checked' : ''} onchange="toggleCheck('${key}', 'sub_${s}', this.checked, ${count})">
                                         </div>
                                         <div class="col-cell nr-col" style="font-size:10px;">${subNr}</div>
-                                        <div class="col-cell name-col" style="font-size:11px; color:var(--text-dim);">Seria ${s+1}</div>
-                                        ${activeHeaders.map(h => {
+                                        <div class="col-cell name-col" style="font-size:11px; color:var(--text-dim);">Seria ${s+1}</div>${activeHeaders.map(h => {
                                             if (h.name.toUpperCase() === 'S') return `<div class="col-cell" style="color:var(--text-dim);">-</div>`;
                                             const subVal = existingSubRow ? (existingSubRow[h.colIdx] || '') : '';
                                             return `
@@ -735,6 +734,62 @@ function resetWeek() {
         saveAll();
         renderGymView();
     }
+}
+
+// EKSPORT PLANU DO STYLOWANEGO EXCELA (.XLSX)
+function downloadXLSX() {
+    if (typeof XLSX === 'undefined') {
+        alert("Biblioteka XLSX jeszcze się ładuje. Spróbuj za chwilę!");
+        return;
+    }
+
+    const p = plans[currentPlan];
+    if (!p) return;
+
+    const rawData = p.data || [];
+    let formattedData = [];
+
+    // NAGŁÓWEK ORAZ ZNAK WODNY NA GÓRZE
+    formattedData.push([`PLAN TRENINGOWY: ${currentPlan.toUpperCase()}`]);
+    formattedData.push(["Wygenerowano w aplikacji Koziar Gym App | koziargym.app"]);
+    formattedData.push([]);
+
+    if (p.notes && p.notes.trim()) {
+        formattedData.push(["NOTATKI DO PLANU:"]);
+        p.notes.split('\n').forEach(line => {
+            formattedData.push([line]);
+        });
+        formattedData.push([]);
+    }
+
+    // PRZENOSZENIE WIERSZY Z TABELI
+    rawData.forEach(row => {
+        formattedData.push([...row]);
+    });
+
+    // ZNAK WODNY NA DOLE
+    formattedData.push([]);
+    formattedData.push(["---"]);
+    formattedData.push(["💪 Trenuj z głową | Wygenerowano w Koziar Gym App"]);
+
+    const worksheet = XLSX.utils.aoa_to_sheet(formattedData);
+
+    // DOBIERANIE SZEROKOŚCI KOLUMN
+    worksheet['!cols'] = [
+        { wch: 12 }, // Nr / Dzień
+        { wch: 32 }, // Ćwiczenie
+        { wch: 8 },  // S
+        { wch: 8 },  // P
+        { wch: 10 }, // KG
+        { wch: 10 }, // RIR
+        { wch: 10 }  // REST
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Plan Treningowy");
+
+    const fileName = currentPlan.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".xlsx";
+    XLSX.writeFile(workbook, fileName);
 }
 
 function downloadTSV() {
