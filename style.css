@@ -12,6 +12,7 @@
     --gold-alt: #c9a961;
     --danger: #ef4444;
     --nav-bg: rgba(10, 10, 10, 0.96);
+    --excel-green: #107c41;
 }
 
 * { 
@@ -169,7 +170,7 @@ main {
     border-bottom: 1px solid #222;
 }
 
-/* AKTYWNY DZIEŃ - ODWZOROWANY ZE ZRZUTU EKRANU */
+/* AKTYWNY DZIEŃ */
 .day-card.active-day {
     border: 1.5px solid #ffd700 !important;
     box-shadow: 0 0 14px rgba(255, 215, 0, 0.18), inset 0 0 10px rgba(255, 215, 0, 0.03);
@@ -180,8 +181,6 @@ main {
     color: #ffd700;
     border-bottom: 1px solid rgba(255, 215, 0, 0.3);
 }
-
-
 
 .day-card.rest-day {
     opacity: 0.6;
@@ -494,6 +493,18 @@ input[type="checkbox"] {
     transition: all 0.2s;
 }
 
+.btn-excel {
+    background: var(--excel-green);
+    color: #fff;
+    border: none;
+    font-weight: 900;
+}
+
+.btn-excel:hover {
+    background: #0e6b37;
+    color: #fff;
+}
+
 .btn-sm { padding: 6px 10px; font-size: 10px; }
 .btn:hover { border-color: var(--gold); color: var(--gold); }
 .btn-primary { background: var(--gold); color: #000; border: none; font-weight: 900; }
@@ -532,7 +543,6 @@ input[type="checkbox"] {
     opacity: 0.6;
 }
 
-/* PRZEJŚCIE I GLOW OKIEN DNI Z ZAZNACZONYMI CHECKBOXAMI */
 .day-card {
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }

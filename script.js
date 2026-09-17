@@ -30,7 +30,7 @@ var hiddenPlans = JSON.parse(localStorage.getItem('koziar_hidden_plans')) || [];
 var defaultPlans = {
     "FBW 3-Dniowy (Domyślny) - by Koziar": {
         isLocked: true,
-        notes: "Gryf długi 20kg\nGryf krótki 15kg\nGryfy łamane 10kg\n\nPo zmianie prostego chwytu na warkocz w tricepsie, wyniki drastycznie skoczyły w górę\nPrzysiad na smithie 170x2 nie pełny zakres\nMartwy 190x1 PR - technika do poprawy",
+        notes: "Gryf długi 20kg\nGryf krótki 15kg\nGryfy łamane 10kg\n\nPo zmianie prostego chwytu na warkocz w tricepsie, wyniki drastically skoczyły w górę\nPrzysiad na smithie 170x2 nie pełny zakres\nMartwy 190x1 PR - technika do poprawy",
         data: [
             ["Dzień 1 - PUSH", "", "", "", "", "", ""],
             ["Nr", "Ćwiczenie", "S", "P", "KG", "RIR", "REST"],
@@ -106,8 +106,8 @@ async function loadPlansFromCloud() {
                 if (!hiddenPlans.includes(row.plan_name) || isAdmin) {
                     loadedPlans[row.plan_name] = {
                         isLocked: false,
-                        notes: row.notes,
-                        data: row.data,
+                        notes: row.notes || "",
+                        data: row.data || [],
                         accessKey: row.access_key,
                         ownerDeviceId: row.user_device_id
                     };
@@ -246,8 +246,9 @@ function handleImportOrKey() {
 
         lines.forEach(l => {
             if (l.startsWith("!!NOTES!!")) {
-                notes = l.split("\t")[1]?.replace(/\[BR\]/g, "\n") || "";
-            } else {
+                const parts = l.split("\t");
+                notes = parts[1] ? parts[1].replace(/\[BR\]/g, "\n") : "";
+            } else if (l.trim() !== "") {
                 data.push(l.split("\t"));
             }
         });
@@ -275,8 +276,10 @@ function handleImportOrKey() {
 function openExport() {
     if (currentMode === 'edit') return;
     const p = plans[currentPlan];
+    if (!p) return;
+
     let lines = [`!!NOTES!!\t${(p.notes || "").replace(/\n/g, "[BR]")}`];
-    p.data.forEach(r => lines.push(r.join("\t")));
+    (p.data || []).forEach(r => lines.push(r.join("\t")));
     
     document.getElementById("exportText").value = lines.join("\n");
     
@@ -399,7 +402,7 @@ function cancelExcelChanges() {
     setMode('basic');
 }
 
-// STRUKTURA PLANU (Ulepszona obsługa REST)
+// STRUKTURA PLANU
 function parseSheetToStructure() {
     const raw = plans[currentPlan]?.data || [];
     let days = [];
@@ -484,7 +487,6 @@ function updateCellDirectly(rowIndex, colIndex, value) {
     renderGymView();
 }
 
-// AUTOMATYCZNE SORTOWANIE ZMIENIONYCH NUMERÓW
 function reorderExercisesInDay(targetRowIdx, newNrVal) {
     const sheetData = plans[currentPlan].data;
     const targetNr = parseFloat(newNrVal);
@@ -553,7 +555,6 @@ function updateSubSetCellDirectly(parentRowIndex, setIdx, headerName, value) {
     saveAll();
 }
 
-// LOGIKA INTELIGENTNYCH CHECKBOXÓW
 function toggleCheck(key, target, value, totalSubSets = 0) {
     if (!checks[key]) checks[key] = {};
 
@@ -736,8 +737,8 @@ function resetWeek() {
     }
 }
 
-// EKSPORT PLANU DO STYLOWANEGO EXCELA (.XLSX)
-function downloadXLSX() {
+// ZAAWANSOWANY EKSPORT PLANU DO ZASTYLIZOWANEGO EXCELA (.XLSX)
+function downloadXLSXStyled() {
     if (typeof XLSX === 'undefined') {
         alert("Biblioteka XLSX jeszcze się ładuje. Spróbuj za chwilę!");
         return;
@@ -747,55 +748,60 @@ function downloadXLSX() {
     if (!p) return;
 
     const rawData = p.data || [];
-    let formattedData = [];
+    let aoa = [];
 
-    // NAGŁÓWEK ORAZ ZNAK WODNY NA GÓRZE
-    formattedData.push([`PLAN TRENINGOWY: ${currentPlan.toUpperCase()}`]);
-    formattedData.push(["Wygenerowano w aplikacji Koziar Gym App | koziargym.app"]);
-    formattedData.push([]);
+    // BANNER GŁÓWNY / ZNAK WODNY GÓRNY
+    aoa.push(["⚡ KOZIAR FIT - PLAN TRENINGOWY"]);
+    aoa.push([`PLAN: ${currentPlan.toUpperCase()}`]);
+    aoa.push([`WYGENEROWANO: ${new Date().toLocaleDateString('pl-PL')} | APLIKACJA KOZIAR FIT`]);
+    aoa.push([]); // Pusta linia
 
     if (p.notes && p.notes.trim()) {
-        formattedData.push(["NOTATKI DO PLANU:"]);
+        aoa.push(["📌 NOTATKI DO PLANU:"]);
         p.notes.split('\n').forEach(line => {
-            formattedData.push([line]);
+            aoa.push([line]);
         });
-        formattedData.push([]);
+        aoa.push([]); // Pusta linia
     }
 
-    // PRZENOSZENIE WIERSZY Z TABELI
+    // WSTAWIANIE I PRZEKSZTAŁCANIE WIERSZY TABELI
     rawData.forEach(row => {
-        formattedData.push([...row]);
+        aoa.push([...row]);
     });
 
-    // ZNAK WODNY NA DOLE
-    formattedData.push([]);
-    formattedData.push(["---"]);
-    formattedData.push(["💪 Trenuj z głową | Wygenerowano w Koziar Gym App"]);
+    // STOPKA / ZNAK WODNY DOLNY
+    aoa.push([]);
+    aoa.push(["--------------------------------------------------"]);
+    aoa.push(["🔥 Wygenerowano w aplikacji KOZIAR FIT - Bądź nie do zatrzymania!"]);
+    aoa.push(["Oficjalny partner treningowy | Wszelkie prawa zastrzeżone"]);
 
-    const worksheet = XLSX.utils.aoa_to_sheet(formattedData);
+    const worksheet = XLSX.utils.aoa_to_sheet(aoa);
 
-    // DOBIERANIE SZEROKOŚCI KOLUMN
-    worksheet['!cols'] = [
-        { wch: 12 }, // Nr / Dzień
-        { wch: 32 }, // Ćwiczenie
-        { wch: 8 },  // S
-        { wch: 8 },  // P
-        { wch: 10 }, // KG
-        { wch: 10 }, // RIR
-        { wch: 10 }  // REST
-    ];
+    // AUTO-DOPASOWANIE SZEROKOŚCI KOLUMN
+    let colWidths = [];
+    aoa.forEach(row => {
+        row.forEach((cellVal, colIdx) => {
+            const strVal = cellVal ? String(cellVal) : "";
+            // Nie bierzemy pod uwagę bardzo długich znaków wodnych przy wyliczaniu szerokości kolumn
+            if (strVal.length < 40) {
+                colWidths[colIdx] = Math.max(colWidths[colIdx] || 10, strVal.length + 4);
+            }
+        });
+    });
+
+    worksheet['!cols'] = colWidths.map(w => ({ wch: Math.min(Math.max(w, 10), 45) }));
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Plan Treningowy");
 
-    const fileName = currentPlan.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".xlsx";
+    const fileName = "KOZIAR_FIT_" + currentPlan.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".xlsx";
     XLSX.writeFile(workbook, fileName);
 }
 
 function downloadTSV() {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([document.getElementById("exportText").value], { type: "text/tab-separated-values" }));
-    a.download = currentPlan.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".tsv";
+    a.download = "KOZIAR_FIT_" + currentPlan.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".tsv";
     a.click();
 }
 

@@ -82,7 +82,7 @@
 
         <button class="nav-btn" onclick="openExport()">
             <i data-lucide="share-2"></i>
-            <span>ZAPISZ</span>
+            <span>EKSPORT</span>
         </button>
 
         <button class="nav-btn" onclick="openImport()">
@@ -113,11 +113,12 @@
     <!-- MODAL EKSPORTU / NADAWANIA KODU -->
     <div id="exportModal" class="modal">
         <div class="modal-box">
-            <h3>Udostępnij Plan / Nadaj Kod</h3>
+            <h3>Eksportuj / Udostępnij Plan</h3>
             <p id="exportKeyInfo" style="font-weight:bold; color:var(--gold); font-size:12px; text-align:center;"></p>
             <textarea id="exportText" readonly></textarea>
             <div class="modal-actions">
                 <button id="btnSetKey" class="btn btn-primary" onclick="setPlanAccessKey()">Nadaj Kod Planu</button>
+                <button class="btn btn-excel" onclick="downloadXLSXStyled()">📊 Pobierz Excel (.xlsx)</button>
                 <button class="btn" onclick="downloadTSV()">Pobierz TSV</button>
                 <button class="btn" onclick="closeModals()">Zamknij</button>
             </div>
