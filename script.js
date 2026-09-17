@@ -737,13 +737,13 @@ function resetWeek() {
     }
 }
 
-// STYLIZOWANY EXPORT HTML/XLSX DLA EXCELA
 function downloadXLSXStyled() {
     const p = plans[currentPlan];
     if (!p) return;
 
     const rawData = p.data || [];
     
+    // Zbiór stylów zgodnych z silnikiem Microsoft Excel (MSO)
     let htmlContent = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
     <head>
@@ -763,114 +763,122 @@ function downloadXLSXStyled() {
         </xml>
         <![endif]-->
         <style>
-            body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #0d0d0d; color: #ffffff; }
-            table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-            th, td { border: 1px solid #242424; padding: 10px; text-align: center; }
+            table {
+                border-collapse: collapse;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            td, th {
+                vertical-align: middle;
+                padding: 6px 10px;
+            }
             
-            /* BANER GŁÓWNY KOZIAR FIT */
-            .banner-row td {
-                background-color: #000000;
+            /* BANER GŁÓWNY */
+            .banner-title {
+                background-color: #1a1a1a;
                 color: #d4af37;
-                font-size: 18px;
+                font-size: 16pt;
                 font-weight: bold;
                 text-align: center;
-                padding: 15px;
-                border: 2px solid #d4af37;
+                border: 2pt solid #d4af37;
             }
-            .subtitle-row td {
-                background-color: #121212;
-                color: #a0a0a0;
-                font-size: 11px;
+            .banner-sub {
+                background-color: #f2f2f2;
+                color: #555555;
+                font-size: 9pt;
                 text-align: center;
-                padding: 6px;
+                border-bottom: 1pt solid #cccccc;
             }
 
             /* NOTATKI */
-            .notes-header td {
-                background-color: #1a1a1a;
-                color: #d4af37;
+            .notes-head {
+                background-color: #f8f9fa;
+                color: #b8860b;
                 font-weight: bold;
-                text-align: left;
-                font-size: 12px;
+                font-size: 10pt;
+                border: 1pt solid #dcdcdc;
             }
-            .notes-cell td {
-                background-color: #121212;
-                color: #ffffff;
-                text-align: left;
-                font-size: 11px;
+            .notes-body {
+                background-color: #ffffff;
+                color: #333333;
+                font-size: 9.5pt;
+                border: 1pt solid #dcdcdc;
+                white-space: pre-wrap;
             }
 
-            /* DZIEŃ TRENINGOWY (NAGŁÓWEK SEKCI) */
-            .day-header-row td {
-                background-color: #1c1a0e;
+            /* SEKCJA DNI (NAGŁÓWEK DZIEŃ) */
+            .day-title {
+                background-color: #262626;
                 color: #ffd700;
-                font-size: 14px;
+                font-size: 12pt;
                 font-weight: bold;
                 text-align: left;
-                border-top: 2px solid #d4af37;
-                border-bottom: 2px solid #d4af37;
-                padding: 10px;
+                border-top: 2pt solid #d4af37;
+                border-bottom: 2pt solid #d4af37;
             }
 
-            /* NAGŁÓWKI TABELI (Nr, Ćwiczenie, S, P, KG itp.) */
-            .table-header-row td {
-                background-color: #181818;
-                color: #d4af37;
+            /* NAGŁÓWKI TABELI (Nr, Ćwiczenie, S, P, KG) */
+            .col-header {
+                background-color: #d4af37;
+                color: #000000;
                 font-weight: bold;
-                font-size: 12px;
-                text-transform: uppercase;
+                font-size: 10pt;
+                text-align: center;
+                border: 1pt solid #b8860b;
             }
 
-            /* WIERSZE Z CWIECZENIAMI */
-            .data-row td {
-                background-color: #121212;
-                color: #ffffff;
-                font-size: 12px;
+            /* DANIE W TABELI (CZIWECZENIA) */
+            .cell-data {
+                background-color: #ffffff;
+                color: #111111;
+                font-size: 10pt;
+                text-align: center;
+                border: 1pt solid #e0e0e0;
             }
-            .data-row-alt td {
-                background-color: #161616;
-                color: #ffffff;
-                font-size: 12px;
+            .cell-data-alt {
+                background-color: #f9f9f9;
+                color: #111111;
+                font-size: 10pt;
+                text-align: center;
+                border: 1pt solid #e0e0e0;
             }
-            .exercise-name {
+            .cell-ex-name {
                 text-align: left !important;
                 font-weight: bold;
             }
 
-            /* STOPKA ZNAK WODNY */
-            .footer-row td {
-                background-color: #000000;
+            /* FOOTER */
+            .footer-cell {
+                background-color: #1a1a1a;
                 color: #d4af37;
-                font-size: 11px;
+                font-size: 9pt;
                 font-weight: bold;
                 text-align: center;
-                padding: 10px;
-                border-top: 1px solid #d4af37;
+                border-top: 1.5pt solid #d4af37;
             }
         </style>
     </head>
     <body>
         <table>
-            <!-- BANER CZAJĄCY MARKI -->
-            <tr class="banner-row">
-                <td colspan="7">⚡ KOZIAR FIT — PLAN TRENINGOWY ⚡</td>
+            <!-- NAGŁÓWEK MARKI -->
+            <tr>
+                <td colspan="7" class="banner-title">⚡ KOZIAR FIT — PLAN TRENINGOWY ⚡</td>
             </tr>
-            <tr class="subtitle-row">
-                <td colspan="7">PLAN: ${currentPlan.toUpperCase()} | WYGENEROWANO: ${new Date().toLocaleDateString('pl-PL')}</td>
+            <tr>
+                <td colspan="7" class="banner-sub">PLAN: ${currentPlan.toUpperCase()} | DATA EXPORTU: ${new Date().toLocaleDateString('pl-PL')}</td>
             </tr>
-            <tr><td colspan="7" style="background:#0d0d0d; border:none; height:10px;"></td></tr>
+            <tr><td colspan="7"></td></tr>
     `;
 
-    // ADD NOTES
+    // SEKCIJA NOTATEK
     if (p.notes && p.notes.trim()) {
         htmlContent += `
-            <tr class="notes-header"><td colspan="7">📌 NOTATKI DO PLANU:</td></tr>
-            <tr class="notes-cell"><td colspan="7">${p.notes.replace(/\n/g, '<br>')}</td></tr>
-            <tr><td colspan="7" style="background:#0d0d0d; border:none; height:10px;"></td></tr>
+            <tr><td colspan="7" class="notes-head">📌 NOTATKI DO PLANU:</td></tr>
+            <tr><td colspan="7" class="notes-body">${p.notes.replace(/\n/g, '<br>')}</td></tr>
+            <tr><td colspan="7"></td></tr>
         `;
     }
 
-    // PRZETWARZANIE TABELI DANYCH
+    // ITERACJA PO WIERSZACH PLANU
     let rowCounter = 0;
     rawData.forEach((row) => {
         if (!row || row.every(c => c === null || c === '')) return;
@@ -878,35 +886,40 @@ function downloadXLSXStyled() {
         const col0 = String(row[0] || '').trim();
         const col1 = String(row[1] || '').trim();
 
+        // Sprawdzanie czy to nagłówek dnia
         if (col0.toLowerCase().startsWith('dzień') || (col0 && !col1 && isNaN(col0))) {
             const title = col1 ? `${col0} - ${col1}` : col0;
             htmlContent += `
-                <tr><td colspan="7" style="background:#0d0d0d; border:none; height:10px;"></td></tr>
-                <tr class="day-header-row"><td colspan="7">💪 ${title.toUpperCase()}</td></tr>
+                <tr><td colspan="7"></td></tr>
+                <tr><td colspan="7" class="day-title">💪 ${title.toUpperCase()}</td></tr>
             `;
-        } else if (col0.toLowerCase() === 'nr' || col1.toLowerCase() === 'ćwiczenie') {
-            htmlContent += `<tr class="table-header-row">`;
+        } 
+        // Sprawdzanie czy to wiersz kolumn (Nr, Ćwiczenie, S, P, KG...)
+        else if (col0.toLowerCase() === 'nr' || col1.toLowerCase() === 'ćwiczenie') {
+            htmlContent += `<tr>`;
             row.forEach(cell => {
-                htmlContent += `<td>${cell || ''}</td>`;
+                htmlContent += `<td class="col-header">${cell || ''}</td>`;
             });
             htmlContent += `</tr>`;
-        } else {
-            const rowClass = (rowCounter % 2 === 0) ? 'data-row' : 'data-row-alt';
-            htmlContent += `<tr class="${rowClass}">`;
+        } 
+        // Zwykły wiersz z ćwiczeniem
+        else {
+            const bgClass = (rowCounter % 2 === 0) ? 'cell-data' : 'cell-data-alt';
+            htmlContent += `<tr>`;
             row.forEach((cell, idx) => {
-                const alignClass = (idx === 1) ? 'class="exercise-name"' : '';
-                htmlContent += `<td ${alignClass}>${cell !== null && cell !== undefined ? cell : ''}</td>`;
+                const alignClass = (idx === 1) ? `${bgClass} cell-ex-name` : bgClass;
+                htmlContent += `<td class="${alignClass}">${cell !== null && cell !== undefined ? cell : ''}</td>`;
             });
             htmlContent += `</tr>`;
             rowCounter++;
         }
     });
 
-    // DOLNY ZNAK WODNY KOZIAR FIT
+    // ZNAK WODNY W FOOTERZE
     htmlContent += `
-            <tr><td colspan="7" style="background:#0d0d0d; border:none; height:15px;"></td></tr>
-            <tr class="footer-row">
-                <td colspan="7">🔥 Wygenerowano w aplikacji KOZIAR FIT — Bądź nie do zatrzymania! 🔥</td>
+            <tr><td colspan="7"></td></tr>
+            <tr>
+                <td colspan="7" class="footer-cell">🔥 KOZIAR FIT — Bądź nie do zatrzymania! 🔥</td>
             </tr>
         </table>
     </body>
