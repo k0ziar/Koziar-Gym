@@ -833,7 +833,7 @@ body.classic-preview-active .floating-logo-btn {
         flex-basis: 164px;
     }
 
-    .col-cell:not(.expand-col):not(.check-col):not(.nr-col):not(.name-col) {
+    .table-grid:not(.basic-table-grid) .col-cell:not(.expand-col):not(.check-col):not(.nr-col):not(.name-col) {
         min-width: 68px;
         max-width: 68px;
         flex-basis: 68px;
