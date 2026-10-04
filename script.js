@@ -27,25 +27,25 @@ var expandedExercises = {};
 var unlockedKeys = JSON.parse(localStorage.getItem('koziar_unlocked_keys')) || [];
 var hiddenPlans = JSON.parse(localStorage.getItem('koziar_hidden_plans')) || [];
 
-var defaultPlans = {
-    "FBW 3-Dniowy (Domyślny) - by Koziar": {
-        isLocked: true,
-        notes: "Gryf długi 20kg\nGryf krótki 15kg\nGryfy łamane 10kg\n\nPo zmianie prostego chwytu na warkocz w tricepsie, wyniki drastically skoczyły w górę\nPrzysiad na smithie 170x2 nie pełny zakres\nMartwy 190x1 PR - technika do poprawy",
-        data: [
-            ["Dzień 1 - PUSH", "", "", "", "", "", ""],
-            ["Nr", "Ćwiczenie", "S", "P", "KG", "RIR", "REST"],
-            ["1", "Ława płaska pauzowana", "5", "3", "115", "1", "120s"],
-            ["2", "Pin Press", "3", "3", "110", "2", "120s"],
-            ["3", "Dipy", "3", "6", "20", "2", "90s"],
-            ["4", "OHP hantlami", "3", "6", "30", "2", "90s"],
-            ["5", "Wznosy wyciąg", "3", "10", "15", "1", "60s"]
-        ]
-    }
-};
-
-var plans = JSON.parse(localStorage.getItem('koziar_plans')) || defaultPlans;
-var currentPlan = localStorage.getItem('koziar_current_plan') || Object.keys(plans)[0];
+// BAZA PLANÓW W PAMIĘCI APLIKACJI (POBIERANA Z SUPABASE)
+var plans = JSON.parse(localStorage.getItem('koziar_plans')) || {};
+var currentPlan = localStorage.getItem('koziar_current_plan') || '';
 var checks = JSON.parse(localStorage.getItem('koziar_checks')) || {};
+
+function isClassicPlan(planName) {
+    if (!planName) return false;
+    const lower = planName.toLowerCase();
+    const p = plans[planName];
+
+    if (p && p.isLocked) return true;
+    if (lower === 'basic1' || lower === 'basic2' || lower === 'basic3') return true;
+    if (lower.includes('basic1') || lower.includes('basic2') || lower.includes('basic3')) {
+        if (!lower.includes('kopia') && !lower.includes('mój plan') && !lower.includes('moj plan')) {
+            return true;
+        }
+    }
+    return false;
+}
 
 function saveAll() {
     if (!isAdmin) {
@@ -59,9 +59,9 @@ function saveAll() {
 }
 
 async function syncPlanToCloud(planName) {
-    if (!window.sbClient) return;
+    if (!window.sbClient || !planName) return;
     const p = plans[planName];
-    if (!p || p.isLocked) return;
+    if (!p || p.isLocked || isClassicPlan(planName)) return;
 
     try {
         const targetDeviceId = p.ownerDeviceId || deviceId;
@@ -89,23 +89,24 @@ async function loadPlansFromCloud() {
     try {
         let query = window.sbClient.from('user_plans').select('*');
 
+        // Jeśli to nie admin, pobieramy plany użytkownika LUB ogólnodostępne Klasyki
         if (!isAdmin) {
+            let filterString = `user_device_id.eq.${deviceId},plan_name.ilike.%basic%`;
             if (unlockedKeys.length > 0) {
-                query = query.or(`user_device_id.eq.${deviceId},access_key.in.("${unlockedKeys.join('","')}")`);
-            } else {
-                query = query.eq('user_device_id', deviceId);
+                filterString += `,access_key.in.("${unlockedKeys.join('","')}")`;
             }
+            query = query.or(filterString);
         }
 
         const { data, error } = await query;
 
         if (!error && data) {
-            let loadedPlans = JSON.parse(JSON.stringify(defaultPlans));
+            let loadedPlans = {};
 
             data.forEach(row => {
                 if (!hiddenPlans.includes(row.plan_name) || isAdmin) {
                     loadedPlans[row.plan_name] = {
-                        isLocked: false,
+                        isLocked: isClassicPlan(row.plan_name),
                         notes: row.notes || "",
                         data: row.data || [],
                         accessKey: row.access_key,
@@ -121,16 +122,25 @@ async function loadPlansFromCloud() {
                 localStorage.setItem('koziar_plans', JSON.stringify(plans));
             }
             
+            const availableKeys = Object.keys(plans);
+            if (availableKeys.length > 0 && (!currentPlan || !plans[currentPlan])) {
+                currentPlan = availableKeys[0];
+            }
+
             initPlanSelect();
             renderGymView();
         }
     } catch (err) {
-        console.log("Tryb offline.");
+        console.log("Błąd ładowania z chmury:", err);
     }
 }
 
 function toggleViewMode() {
     if (currentMode === 'edit') return;
+    if (!isAdmin && isClassicPlan(currentPlan)) {
+        alert("Klasyki są zablokowane. Odblokuj plan, aby przełączać tryby.");
+        return;
+    }
     currentMode = (currentMode === 'basic') ? 'pro' : 'basic';
     updateNavButtons();
     setMode(currentMode);
@@ -138,6 +148,10 @@ function toggleViewMode() {
 
 function toggleEditMode() {
     if (currentMode === 'edit') return;
+    if (!isAdmin && isClassicPlan(currentPlan)) {
+        alert("Klasyki są w trybie podglądu. Kliknij 'Odblokuj plan', aby stworzyć edytowalną kopię.");
+        return;
+    }
     setMode('edit');
 }
 
@@ -150,7 +164,9 @@ function deleteCurrentPlan() {
     if (currentMode === 'edit') return;
     const p = plans[currentPlan];
     if (!p) return alert("Nie wybrano planu.");
-    if (p.isLocked) return alert("Nie możesz usunąć oficjalnego planu domyślnego.");
+    if (p.isLocked || isClassicPlan(currentPlan)) {
+        return alert("Nie możesz usunąć oficjalnego planu klasycznego.");
+    }
 
     if (confirm(`Czy na pewno chcesz usunąć plan "${currentPlan}" lokalnie?`)) {
         if (!hiddenPlans.includes(currentPlan)) {
@@ -165,7 +181,7 @@ function deleteCurrentPlan() {
         delete plans[currentPlan];
         saveAll();
 
-        currentPlan = Object.keys(plans)[0];
+        currentPlan = Object.keys(plans)[0] || '';
         localStorage.setItem('koziar_current_plan', currentPlan);
 
         initPlanSelect();
@@ -201,7 +217,7 @@ function logoutAdmin() {
 
 function setPlanAccessKey() {
     const p = plans[currentPlan];
-    if (!p || p.isLocked) return alert("Wybierz własny odblokowany plan.");
+    if (!p || p.isLocked || isClassicPlan(currentPlan)) return alert("Wybierz własny odblokowany plan.");
 
     const key = prompt(`Ustaw Klucz Dostępu (kod) dla planu "${currentPlan}":`, p.accessKey || "");
     if (key !== null) {
@@ -227,6 +243,37 @@ function openImport() {
 
 function openSocialModal() {
     document.getElementById("socialModal").classList.add("active");
+}
+
+function openIndividualPlanModal() {
+    document.getElementById("individualModal").classList.add("active");
+}
+
+function unlockClassicPlanCopy() {
+    const sourcePlan = plans[currentPlan];
+    if (!sourcePlan) return;
+
+    let copyName = currentPlan + " (Mój Plan)";
+    let counter = 1;
+
+    while (plans[copyName]) {
+        counter++;
+        copyName = `${currentPlan} (Mój Plan ${counter})`;
+    }
+
+    plans[copyName] = {
+        isLocked: false,
+        notes: sourcePlan.notes || "",
+        data: JSON.parse(JSON.stringify(sourcePlan.data || [])),
+        ownerDeviceId: deviceId
+    };
+
+    currentPlan = copyName;
+    saveAll();
+    initPlanSelect();
+    renderGymView();
+
+    alert(`Utworzono Twoją prywatną kopię: "${copyName}".\n\n📌 Pamiętaj: Plan darmowy/gotowiec warto delikatnie dostosować do swoich możliwości i sprzętu. W razie pytań skontaktuj się ze mną!`);
 }
 
 function importPlanData(suggestedName, notes, data) {
@@ -312,16 +359,24 @@ function initPlanSelect() {
         if (!hiddenPlans.includes(name) || isAdmin) {
             const keyTag = plans[name].accessKey ? ` 🔑[${plans[name].accessKey}]` : '';
             const opt = new Option(name + keyTag, name);
-            if (plans[name].isLocked) gOfficial.appendChild(opt);
-            else gUser.appendChild(opt);
+            if (isClassicPlan(name)) {
+                gOfficial.appendChild(opt);
+            } else {
+                gUser.appendChild(opt);
+            }
         }
     });
 
     if (gOfficial.children.length > 0) select.appendChild(gOfficial);
     if (gUser.children.length > 0) select.appendChild(gUser);
 
-    if (!plans[currentPlan]) currentPlan = Object.keys(plans)[0];
-    select.value = currentPlan;
+    if (!plans[currentPlan] && Object.keys(plans).length > 0) {
+        currentPlan = Object.keys(plans)[0];
+    }
+    
+    if (currentPlan) {
+        select.value = currentPlan;
+    }
 
     checkAdminBadge();
 }
@@ -335,7 +390,7 @@ function loadPlan() {
 
 function saveNotes() {
     const el = document.getElementById("planNotes");
-    if (el && plans[currentPlan] && !plans[currentPlan].isLocked) {
+    if (el && plans[currentPlan] && !isClassicPlan(currentPlan)) {
         plans[currentPlan].notes = el.value;
         saveAll();
     }
@@ -375,7 +430,8 @@ function initExcel() {
     container.innerHTML = '';
 
     const p = plans[currentPlan];
-    tempExcelData = JSON.parse(JSON.stringify(p.data));
+    if (!p) return;
+    tempExcelData = JSON.parse(JSON.stringify(p.data || []));
 
     hotInstance = new Handsontable(container, {
         data: tempExcelData,
@@ -389,7 +445,7 @@ function initExcel() {
         manualColumnResize: true,
         manualRowResize: true,
         stretchH: 'all',
-        readOnly: p.isLocked
+        readOnly: p.isLocked || isClassicPlan(currentPlan)
     });
 }
 
@@ -397,7 +453,7 @@ function addExcelRow() { if (hotInstance) hotInstance.alter('insert_row_below');
 function addExcelCol() { if (hotInstance) hotInstance.alter('insert_col_right'); }
 
 function saveExcelChanges() {
-    if (hotInstance && plans[currentPlan] && !plans[currentPlan].isLocked) {
+    if (hotInstance && plans[currentPlan] && !isClassicPlan(currentPlan)) {
         plans[currentPlan].data = hotInstance.getData();
         saveAll();
     }
@@ -472,12 +528,8 @@ function parseSheetToStructure() {
 }
 
 function ensurePlanEditable() {
-    if (plans[currentPlan].isLocked) {
-        const copyName = currentPlan.replace(" - by Koziar", "").replace(" (Domyślny)", "") + " (Mój Plan)";
-        plans[copyName] = JSON.parse(JSON.stringify(plans[currentPlan]));
-        plans[copyName].isLocked = false;
-        currentPlan = copyName;
-        initPlanSelect();
+    if (isClassicPlan(currentPlan)) {
+        unlockClassicPlanCopy();
     }
 }
 
@@ -522,6 +574,8 @@ function updateSubSetCellDirectly(parentRowIndex, setIdx, headerName, value) {
 }
 
 function toggleCheck(key, target, value, totalSubSets = 0) {
+    if (!isAdmin && isClassicPlan(currentPlan)) return;
+
     if (!checks[key]) checks[key] = {};
 
     if (target === 'main') {
@@ -547,15 +601,34 @@ function toggleCheck(key, target, value, totalSubSets = 0) {
 
 function renderGymView() {
     const p = plans[currentPlan];
-    if (!p) return;
+    const overlay = document.getElementById("classicOverlayContainer");
+    const notesContainer = document.getElementById("notesContainer");
+    const gymView = document.getElementById("gymView");
+
+    if (!p) {
+        if (gymView) gymView.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-dim);">Brak dostępnych planów. Pobieranie z bazy danych...</div>';
+        if (overlay) overlay.style.display = "none";
+        return;
+    }
+
+    const isLockedClassic = isClassicPlan(currentPlan) && !isAdmin;
+
+    if (isLockedClassic) {
+        if (overlay) overlay.style.display = "flex";
+        if (notesContainer) notesContainer.classList.add("classic-blurred-view");
+        if (gymView) gymView.classList.add("classic-blurred-view");
+    } else {
+        if (overlay) overlay.style.display = "none";
+        if (notesContainer) notesContainer.classList.remove("classic-blurred-view");
+        if (gymView) gymView.classList.remove("classic-blurred-view");
+    }
 
     const notesEl = document.getElementById("planNotes");
     if (notesEl) {
         notesEl.value = p.notes || "";
-        notesEl.readOnly = p.isLocked;
+        notesEl.readOnly = isLockedClassic;
     }
 
-    const gymView = document.getElementById('gymView');
     if (!gymView) return;
 
     const { days, headers } = parseSheetToStructure();
@@ -564,7 +637,8 @@ function renderGymView() {
         ? headers.filter(h => ['S','P','KG'].includes(h.name.toUpperCase())) 
         : headers;
 
-    const isReadOnlyAttr = p.isLocked ? 'readonly' : '';
+    const isReadOnlyAttr = isLockedClassic ? 'readonly' : '';
+    const isCheckDisabled = isLockedClassic ? 'disabled' : '';
 
     gymView.innerHTML = days.map((day, di) => {
         let hasAnyCheckedInDay = false;
@@ -617,7 +691,7 @@ function renderGymView() {
                                 </div>` : ''}
                                 
                                 <div class="col-cell check-col">
-                                    <input type="checkbox" ${mainChecked ? 'checked' : ''} onchange="toggleCheck('${key}', 'main', this.checked, ${count})">
+                                    <input type="checkbox" ${mainChecked ? 'checked' : ''} ${isCheckDisabled} onchange="toggleCheck('${key}', 'main', this.checked, ${count})">
                                 </div>
                                 <div class="col-cell nr-col">
                                     <input type="text" class="cell-input" value="${ex.nr}" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex}, 0, this.value)">
@@ -645,7 +719,7 @@ function renderGymView() {
                                     <div class="row-grid sub-row ${subChecked ? 'done' : ''}">
                                         <div class="col-cell expand-col"></div>
                                         <div class="col-cell check-col">
-                                            <input type="checkbox" ${subChecked ? 'checked' : ''} onchange="toggleCheck('${key}', 'sub_${s}', this.checked, ${count})">
+                                            <input type="checkbox" ${subChecked ? 'checked' : ''} ${isCheckDisabled} onchange="toggleCheck('${key}', 'sub_${s}', this.checked, ${count})">
                                         </div>
                                         <div class="col-cell nr-col" style="font-size:10px;">${subNr}</div>
                                         <div class="col-cell name-col" style="font-size:11px; color:var(--text-dim);">Seria ${s+1}</div>${activeHeaders.map(h => {
@@ -706,29 +780,15 @@ function resetWeek() {
 
 function formatExcelCell(val) {
     if (val === null || val === undefined || val === 'null') return "";
-    
     if (val instanceof Date) {
-        const month = val.getMonth() + 1;
-        const day = val.getDate();
-        return `${month}.${day}`;
+        return `${val.getMonth() + 1}.${val.getDate()}`;
     }
-
-    let strVal = String(val).trim();
-
-    if (!isNaN(val) && Number(val) >= 40000 && Number(val) <= 50000) {
-        const excelDate = new Date(Math.round((Number(val) - 25569) * 86400 * 1000));
-        const month = excelDate.getUTCMonth() + 1;
-        const day = excelDate.getUTCDate();
-        return `${month}.${day}`;
-    }
-
-    return strVal;
+    return String(val).trim();
 }
 
 function parseExcelToPlan(workbook) {
     const firstSheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[firstSheetName];
-    
     const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
 
     let planTitle = "Importowany Plan";

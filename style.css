@@ -110,9 +110,111 @@ header {
 
 /* --- KONTENER GŁÓWNY --- */
 main { 
+    position: relative;
     padding: 14px; 
     max-width: 700px; 
     margin: 0 auto; 
+}
+
+/* --- NAKŁADKA I EFEKT ZAMGLENIA DLA KLASYKÓW --- */
+.classic-blurred-view {
+    filter: blur(5px);
+    opacity: 0.4;
+    pointer-events: none;
+    user-select: none;
+    transition: all 0.3s ease;
+}
+
+.classic-overlay-wrapper {
+    position: absolute;
+    top: 20px;
+    left: 14px;
+    right: 14px;
+    z-index: 90;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px;
+}
+
+.classic-overlay-content {
+    background: rgba(18, 18, 18, 0.92);
+    border: 2px solid var(--gold);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9), 0 0 20px var(--gold-glow);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border-radius: 20px;
+    padding: 24px 20px;
+    text-align: center;
+    max-width: 480px;
+    width: 100%;
+    animation: fadeInOverlay 0.3s ease;
+}
+
+@keyframes fadeInOverlay {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.classic-badge-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(212, 175, 55, 0.15);
+    color: var(--gold);
+    border: 1px solid var(--border-gold);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+}
+
+.classic-overlay-content h3 {
+    margin: 0 0 10px 0;
+    font-size: 17px;
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+}
+
+.classic-overlay-content p {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin: 0 0 20px 0;
+}
+
+.classic-overlay-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.btn-overlay {
+    width: 100%;
+    padding: 14px;
+    font-size: 13px;
+    font-weight: 900;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+}
+
+.btn-individual {
+    background: linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%);
+    color: var(--gold);
+    border: 1.5px solid var(--gold);
+    transition: all 0.2s ease;
+}
+
+.btn-individual:hover {
+    background: var(--gold);
+    color: #000;
 }
 
 .notes-area {

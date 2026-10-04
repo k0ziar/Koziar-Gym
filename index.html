@@ -49,6 +49,27 @@
 
     <!-- KONTENER GŁÓWNY -->
     <main>
+        <!-- KONTENER BLOKADY / NAKŁADKI DLA KLASYKÓW -->
+        <div id="classicOverlayContainer" class="classic-overlay-wrapper" style="display: none;">
+            <div class="classic-overlay-content">
+                <div class="classic-badge-header">
+                    <i data-lucide="lock" style="width: 20px; height: 20px;"></i>
+                    <span>DARMOWY PLAN GOTOWIEC</span>
+                </div>
+                <h3>TO JEST DARMOWY KLASYK KOZIARA</h3>
+                <p>Możesz go odblokować, aby utworzyć własną kopię i dostosować ćwiczenia oraz ciężary pod siebie, albo zamówić w pełni indywidualny plan stworzony specjalnie dla Ciebie!</p>
+                
+                <div class="classic-overlay-actions">
+                    <button class="btn btn-primary btn-overlay" onclick="unlockClassicPlanCopy()">
+                        <i data-lucide="unlock"></i> ODBLOKUJ PLAN (Kopia)
+                    </button>
+                    <button class="btn btn-individual btn-overlay" onclick="openIndividualPlanModal()">
+                        <i data-lucide="sparkles"></i> ZAMÓW INDYWIDUALNY PLAN
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- NOTATKI -->
         <div class="notes-area" id="notesContainer">
             <label>NOTATKI DO PLANU</label>
@@ -143,6 +164,36 @@
                 <button class="btn btn-excel" onclick="downloadXLSXStyled()">📊 Pobierz Excel (.xlsx)</button>
                 <button class="btn" onclick="downloadTSV()">Pobierz TSV</button>
                 <button class="btn" onclick="closeModals()">Zamknij</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL INDYWIDUALNEGO PLANU -->
+    <div id="individualModal" class="modal">
+        <div class="modal-box social-box">
+            <div class="social-header">
+                <img src="logo.png" alt="Koziar Fit Logo" class="social-modal-logo">
+                <h3>PLAN INDYWIDUALNY KOZIARA</h3>
+            </div>
+            
+            <p class="social-desc" style="text-align: left; font-size: 12.5px;">
+                Darmowe Klasyki to super opcja na start, ale <strong>indywidualny plan treningowy to zupełnie inny poziom efektów!</strong><br><br>
+                🔥 Plan dopasowany w 100% pod Twoją anatomię, cel, staż oraz sprzęt.<br>
+                🔥 Stała opieka, periodyzacja i korekta techniki.<br>
+                🔥 Eliminacja braków i ciągły progres bez przestojów.
+            </p>
+
+            <div class="social-links-list">
+                <a href="https://instagram.com/" target="_blank" class="social-link-btn instagram">
+                    <i data-lucide="instagram"></i> Napisz na Instagramie
+                </a>
+                <a href="https://wa.me/" target="_blank" class="social-link-btn whatsapp">
+                    <i data-lucide="message-circle"></i> Szybki kontakt WhatsApp
+                </a>
+            </div>
+
+            <div class="modal-actions" style="margin-top:10px;">
+                <button class="btn btn-primary" onclick="closeModals()" style="width:100%;">Zamknij</button>
             </div>
         </div>
     </div>
