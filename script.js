@@ -30,7 +30,7 @@ var hiddenPlans = JSON.parse(localStorage.getItem('koziar_hidden_plans')) || [];
 var defaultPlans = {
     "FBW 3-Dniowy (Domyślny) - by Koziar": {
         isLocked: true,
-        notes: "Gryf długi 20kg\nGryf krótki 15kg\nGryfy łamane 10kg\n\nPo zmianie prostego chwytu na warkocz w tricepsie, wyniki drastycznie skoczyły w górę\nPrzysiad na smithie 170x2 nie pełny zakres\nMartwy 190x1 PR - technika do poprawy",
+        notes: "Gryf długi 20kg\nGryf krótki 15kg\nGryfy łamane 10kg\n\nPo zmianie prostego chwytu na warkocz w tricepsie, wyniki drastically skoczyły w górę\nPrzysiad na smithie 170x2 nie pełny zakres\nMartwy 190x1 PR - technika do poprawy",
         data: [
             ["Dzień 1 - PUSH", "", "", "", "", "", ""],
             ["Nr", "Ćwiczenie", "S", "P", "KG", "RIR", "REST"],
@@ -486,11 +486,6 @@ function ensurePlanEditable() {
 function updateCellDirectly(rowIndex, colIndex, value) {
     ensurePlanEditable();
     plans[currentPlan].data[rowIndex][colIndex] = value;
-
-    if (colIndex === 0) {
-        reorderExercisesInDay(rowIndex, value);
-    }
-
     saveAll();
     renderGymView();
 }
@@ -710,11 +705,148 @@ function resetWeek() {
     }
 }
 
+// Funkcja pomocnicza do pobierania i przeliczania wartości komórek z pliku Excela
+function formatExcelCell(val) {
+    if (val === null || val === undefined) return "";
+    
+    if (val instanceof Date) {
+        const d = val.getDate();
+        const m = val.getMonth() + 1;
+        return `${d}.${m}`;
+    }
+
+    let strVal = String(val).trim();
+
+    // Jeśli komórka zawiera numer seryjny daty Excela (np. 46023 = 2026-01-01)
+    if (!isNaN(val) && Number(val) >= 40000 && Number(val) <= 50000) {
+        const excelDate = new Date(Math.round((Number(val) - 25569) * 86400 * 1000));
+        const day = excelDate.getUTCDate();
+        const month = excelDate.getUTCMonth() + 1;
+        return `${day}.${month}`;
+    }
+
+    return strVal;
+}
+
+function parseExcelToPlan(workbook) {
+    const firstSheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[firstSheetName];
+    
+    const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
+
+    let planTitle = "Importowany Plan";
+    let notes = "";
+    let data = [];
+    let readingNotes = false;
+
+    // Pobranie dynamicznych nagłówków tabeli (np. Nr, Ćwiczenie, S, P, KG, RIR...)
+    let headers = ["Nr", "Ćwiczenie", "S", "P", "KG"];
+    for (let r = 0; r < rawRows.length; r++) {
+        const row = rawRows[r].map(c => String(c).trim());
+        if (row.length >= 2 && row[0].toLowerCase() === "nr" && row[1].toLowerCase() === "ćwiczenie") {
+            headers = row.filter(c => c !== "");
+            break;
+        }
+    }
+
+    let currentParentNr = "";
+    let subSetIndex = 1;
+
+    for (let r = 0; r < rawRows.length; r++) {
+        const rawRow = rawRows[r];
+        if (!rawRow || rawRow.every(cell => String(cell).trim() === "")) continue;
+
+        const row = rawRow.map(c => formatExcelCell(c));
+        const firstCell = row[0] || "";
+
+        // Tytuł planu
+        if (firstCell.startsWith("⚡ PLAN:")) {
+            planTitle = firstCell.replace("⚡ PLAN:", "").replace(/⚡/g, "").trim();
+            continue;
+        }
+
+        // Sekcja notatek
+        if (firstCell.includes("📌 NOTATKI DO PLANU:")) {
+            readingNotes = true;
+            continue;
+        }
+
+        // Pomijanie stopki i powtórzonych nagłówków
+        if (firstCell.startsWith("⚡ Wygenerowano") || firstCell.toLowerCase() === "nr") {
+            readingNotes = false;
+            continue;
+        }
+
+        if (readingNotes) {
+            notes += (notes ? "\n" : "") + firstCell;
+            continue;
+        }
+
+        let formattedRow = new Array(headers.length).fill("");
+        for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+            formattedRow[colIdx] = row[colIdx] !== undefined ? row[colIdx] : "";
+        }
+
+        const col0 = formattedRow[0];
+        const col1 = formattedRow[1];
+
+        if (col0.startsWith("#") || col0.toLowerCase().startsWith("dzień") || (col0 && !col1 && isNaN(col0))) {
+            currentParentNr = "";
+            subSetIndex = 1;
+        } 
+        else if (col0.includes(".") || (col0 === "" && formattedRow.slice(2).some(v => v !== ""))) {
+            if (currentParentNr !== "") {
+                formattedRow[0] = `${currentParentNr}.${subSetIndex}`;
+                subSetIndex++;
+            }
+        } 
+        else if (col0 !== "") {
+            currentParentNr = col0;
+            subSetIndex = 1;
+        }
+
+        data.push(formattedRow);
+    }
+
+    data.unshift(headers);
+    importPlanData(planTitle, notes, data);
+}
+
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const fileName = file.name.toLowerCase();
+
+    if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const data = new Uint8Array(ev.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                parseExcelToPlan(workbook);
+            } catch (err) {
+                alert("Błąd podczas odczytu pliku Excel: " + err.message);
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    } else {
+        const reader = new FileReader();
+        reader.onload = (ev) => { 
+            document.getElementById("importInputVal").value = ev.target.result; 
+        };
+        reader.readAsText(file);
+    }
+}
+
 function downloadXLSXStyled() {
     const p = plans[currentPlan];
     if (!p) return;
 
     const rawData = p.data || [];
+    const { headers } = parseSheetToStructure();
+    
+    const colHeaders = ["Nr", "Ćwiczenie", ...headers.map(h => h.name)];
 
     const COLOR_GOLD_HEADER = "#E5B024"; 
     const COLOR_DAY_ACTIVE = "#F1C232";  
@@ -753,14 +885,12 @@ function downloadXLSXStyled() {
             <colgroup>
                 <col width="60" style="width:60pt; mso-width-source:userset;" />
                 <col width="350" style="width:350pt; mso-width-source:userset;" />
-                <col width="60" style="width:60pt; mso-width-source:userset;" />
-                <col width="90" style="width:90pt; mso-width-source:userset;" />
-                <col width="70" style="width:70pt; mso-width-source:userset;" />
+                ${headers.map(() => '<col width="80" style="width:80pt; mso-width-source:userset;" />').join('')}
             </colgroup>
 
             <!-- NAGŁÓWEK GŁÓWNY PLANU -->
             <tr height="30" style="height:30pt; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; color:${COLOR_TEXT_DARK};">
-                <td colspan="5" style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-size:12pt; font-weight:bold; white-space:nowrap;">
+                <td colspan="${colHeaders.length}" style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-size:12pt; font-weight:bold; white-space:nowrap;">
                     ⚡ PLAN: ${currentPlan.toUpperCase()} ⚡
                 </td>
             </tr>
@@ -770,26 +900,22 @@ function downloadXLSXStyled() {
         const formattedNotes = p.notes.replace(/\n/g, '<br>');
         htmlContent += `
             <tr height="20" style="height:20pt; background-color:#1a1a1a;">
-                <td colspan="5" style="border:1px solid ${COLOR_BORDER}; background-color:#1a1a1a; color:${COLOR_GOLD_HEADER}; font-weight:bold; font-size:9pt;">
+                <td colspan="${colHeaders.length}" style="border:1px solid ${COLOR_BORDER}; background-color:#1a1a1a; color:${COLOR_GOLD_HEADER}; font-weight:bold; font-size:9pt;">
                     📌 NOTATKI DO PLANU:
                 </td>
             </tr>
             <tr>
-                <td colspan="5" style="border:1px solid ${COLOR_BORDER}; background-color:#f9f9f9; color:#333333; font-size:9.5pt; text-align:left; white-space:normal; padding:8px;">
+                <td colspan="${colHeaders.length}" style="border:1px solid ${COLOR_BORDER}; background-color:#f9f9f9; color:#333333; font-size:9.5pt; text-align:left; white-space:normal; padding:8px;">
                     ${formattedNotes}
                 </td>
             </tr>
-            <tr height="10"><td colspan="5" style="border:none; background-color:#ffffff;"></td></tr>
+            <tr height="10"><td colspan="${colHeaders.length}" style="border:none; background-color:#ffffff;"></td></tr>
         `;
     }
 
     htmlContent += `
             <tr height="25" style="height:25pt; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; color:${COLOR_TEXT_DARK};">
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold;">Nr</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${COLOR_GOLD_HEADER}; font-weight:bold;">Ćwiczenie</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold;">S</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold;">P</td>
-                <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold;">KG</td>
+                ${colHeaders.map((h, i) => `<td style="border:1px solid ${COLOR_BORDER}; text-align:${i === 1 ? 'left' : 'center'}; background-color:${COLOR_GOLD_HEADER}; font-weight:bold;">${h}</td>`).join('')}
             </tr>
     `;
 
@@ -811,9 +937,7 @@ function downloadXLSXStyled() {
             htmlContent += `
                 <tr height="25" style="height:25pt; background-color:${bgDay}; font-weight:bold; color:${textDay};">
                     <td colspan="2" style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgDay}; color:${textDay}; font-weight:bold; white-space:nowrap;">${dayTitle.toUpperCase()}</td>
-                    <td style="border:1px solid ${COLOR_BORDER}; background-color:${bgDay};"></td>
-                    <td style="border:1px solid ${COLOR_BORDER}; background-color:${bgDay};"></td>
-                    <td style="border:1px solid ${COLOR_BORDER}; background-color:${bgDay};"></td>
+                    ${headers.map(() => `<td style="border:1px solid ${COLOR_BORDER}; background-color:${bgDay};"></td>`).join('')}
                 </tr>
             `;
             dataRowCounter = 0;
@@ -830,9 +954,7 @@ function downloadXLSXStyled() {
                 <tr height="22" style="height:22pt; background-color:${bgRow};">
                     <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap; ${isSubRow ? 'font-size:8.5pt; color:#666666;' : ''}">${row[0] || ''}</td>
                     <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgRow}; white-space:nowrap; font-weight:${isSubRow ? 'normal' : 'bold'};">${exerciseNameDisplay}</td>
-                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${row[2] || ''}</td>
-                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${row[3] || ''}</td>
-                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${row[4] || ''}</td>
+                    ${headers.map(h => `<td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${row[h.colIdx] !== undefined ? row[h.colIdx] : ''}</td>`).join('')}
                 </tr>
             `;
             dataRowCounter++;
@@ -840,9 +962,9 @@ function downloadXLSXStyled() {
     });
 
     htmlContent += `
-            <tr height="12"><td colspan="5" style="border:none; background-color:#ffffff;"></td></tr>
+            <tr height="12"><td colspan="${colHeaders.length}" style="border:none; background-color:#ffffff;"></td></tr>
             <tr height="25" style="height:25pt; background-color:#111111;">
-                <td colspan="5" style="border:1px solid ${COLOR_BORDER}; background-color:#111111; color:${COLOR_GOLD_HEADER}; text-align:center; font-size:9pt; font-weight:bold; white-space:nowrap;">
+                <td colspan="${colHeaders.length}" style="border:1px solid ${COLOR_BORDER}; background-color:#111111; color:${COLOR_GOLD_HEADER}; text-align:center; font-size:9pt; font-weight:bold; white-space:nowrap;">
                     ⚡ Wygenerowano w aplikacji KOZIAR FIT ⚡
                 </td>
             </tr>
@@ -863,88 +985,6 @@ function downloadTSV() {
     a.href = URL.createObjectURL(new Blob([document.getElementById("exportText").value], { type: "text/tab-separated-values" }));
     a.download = "KOZIAR_FIT_" + currentPlan.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".tsv";
     a.click();
-}
-
-function parseExcelToPlan(workbook) {
-    const firstSheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[firstSheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-
-    let planTitle = "Importowany Plan";
-    let notes = "";
-    let data = [];
-    let readingNotes = false;
-
-    for (let r = 0; r < rows.length; r++) {
-        const row = rows[r].map(c => String(c).trim());
-        if (row.every(cell => cell === "")) continue;
-
-        const firstCell = row[0] || "";
-
-        // Wychwytywanie nagłówka pliku
-        if (firstCell.startsWith("⚡ PLAN:")) {
-            planTitle = firstCell.replace("⚡ PLAN:", "").replace(/⚡/g, "").trim();
-            continue;
-        }
-
-        // Wychwytywanie notatek
-        if (firstCell.includes("📌 NOTATKI DO PLANU:")) {
-            readingNotes = true;
-            continue;
-        }
-
-        // Ignorowanie stopki i zbędnych nagłówków tabeli
-        if (firstCell.startsWith("⚡ Wygenerowano") || firstCell.toLowerCase() === "nr") {
-            readingNotes = false;
-            continue;
-        }
-
-        if (readingNotes) {
-            notes += (notes ? "\n" : "") + firstCell;
-            continue;
-        }
-
-        // Zapisywanie wierszy z ćwiczeniami i dniami
-        data.push([
-            row[0] || "",
-            row[1] || "",
-            row[2] || "",
-            row[3] || "",
-            row[4] || ""
-        ]);
-    }
-
-    // Dodanie domyślnego nagłówka kolumn
-    data.unshift(["Nr", "Ćwiczenie", "S", "P", "KG"]);
-
-    importPlanData(planTitle, notes, data);
-}
-
-function handleFileSelect(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const fileName = file.name.toLowerCase();
-
-    if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            try {
-                const data = new Uint8Array(ev.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                parseExcelToPlan(workbook);
-            } catch (err) {
-                alert("Błąd podczas odczytu pliku Excel: " + err.message);
-            }
-        };
-        reader.readAsArrayBuffer(file);
-    } else {
-        const reader = new FileReader();
-        reader.onload = (ev) => { 
-            document.getElementById("importInputVal").value = ev.target.result; 
-        };
-        reader.readAsText(file);
-    }
 }
 
 function closeModals() { document.querySelectorAll(".modal").forEach(m => m.classList.remove("active")); }
