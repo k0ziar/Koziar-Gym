@@ -11,16 +11,16 @@
     <!-- Konfiguracja PWA dla Safari / iOS -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Koziar Fit">
+    <meta name="apple-mobile-web-app-title" content="KZAR Coaching">
 
     <!-- Ikona i konfiguracja dla Androida / Chrome -->
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#E5B024">
+    <meta name="theme-color" content="#0d0d0d">
     <meta name="mobile-web-app-capable" content="yes">
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KOZIAR FIT</title>
+    <title>KZAR Coaching | Plany treningowe</title>
 
     <!-- ZEWNĘTRZNE SKRYPTY / BIBLIOTEKI -->
     <script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
@@ -36,7 +36,10 @@
 
     <!-- NAGŁÓWEK -->
     <header>
-        <div class="brand-logo" onclick="secretAdminPrompt()" title="Kliknij, aby podać PIN">KOZIAR <span>FIT</span></div>
+        <div class="brand-logo" onclick="secretAdminPrompt()" title="Panel trenera">
+            <img src="logo.png" alt="">
+            <div class="brand-wordmark">KZAR <span>COACHING</span></div>
+        </div>
         
         <div id="adminBadge" class="admin-badge" style="display:none;" onclick="logoutAdmin()">
             <i data-lucide="log-out" style="width:12px; height:12px;"></i> TRENER (WYJDŹ)
@@ -54,17 +57,17 @@
             <div class="classic-overlay-content">
                 <div class="classic-badge-header">
                     <i data-lucide="lock" style="width: 20px; height: 20px;"></i>
-                    <span>DARMOWY PLAN GOTOWIEC</span>
+                    <span>PLAN BEZPŁATNY</span>
                 </div>
-                <h3>TO JEST DARMOWY KLASYK KOZIARA</h3>
-                <p>Możesz go odblokować, aby utworzyć własną kopię i dostosować ćwiczenia oraz ciężary pod siebie, albo zamówić w pełni indywidualny plan stworzony specjalnie dla Ciebie!</p>
+                <h3>Chcesz trenować według tego planu?</h3>
+                <p>Obejrzyj ćwiczenia i opis. Odblokuj własną kopię do edycji albo skontaktuj się z trenerem.</p>
                 
                 <div class="classic-overlay-actions">
                     <button class="btn btn-primary btn-overlay" onclick="unlockClassicPlanCopy()">
-                        <i data-lucide="unlock"></i> ODBLOKUJ PLAN (Kopia)
+                        <i data-lucide="unlock"></i> Odblokuj kopię
                     </button>
                     <button class="btn btn-individual btn-overlay" onclick="openIndividualPlanModal()">
-                        <i data-lucide="sparkles"></i> ZAMÓW INDYWIDUALNY PLAN
+                        <i data-lucide="message-circle"></i> Porozmawiaj z trenerem
                     </button>
                 </div>
             </div>
@@ -92,8 +95,8 @@
     </main>
 
     <!-- PŁYWAJĄCE LOGO Z LINKAMI -->
-    <div class="floating-logo-btn" onclick="openSocialModal()" title="Współpraca z Koziarem">
-        <img src="logo.png" alt="Koziar Fit Logo">
+    <div class="floating-logo-btn" onclick="openSocialModal()" title="Kontakt z KZAR Coaching">
+        <img src="logo.png" alt="Otwórz kontakt z trenerem">
     </div>
 
     <!-- NAV BAR MOBILNY -->
@@ -161,7 +164,7 @@
             <textarea id="exportText" readonly></textarea>
             <div class="modal-actions">
                 <button id="btnSetKey" class="btn btn-primary" onclick="setPlanAccessKey()">Nadaj Kod Planu</button>
-                <button class="btn btn-excel" onclick="downloadXLSXStyled()">📊 Pobierz Excel (.xlsx)</button>
+                <button class="btn btn-excel" onclick="downloadXLSXStyled()">📊 Pobierz Excel (.xls)</button>
                 <button class="btn" onclick="downloadTSV()">Pobierz TSV</button>
                 <button class="btn" onclick="closeModals()">Zamknij</button>
             </div>
@@ -172,20 +175,18 @@
     <div id="individualModal" class="modal">
         <div class="modal-box social-box">
             <div class="social-header">
-                <img src="logo.png" alt="Koziar Fit Logo" class="social-modal-logo">
-                <h3>PLAN INDYWIDUALNY KOZIARA</h3>
+                <img src="logo.png" alt="Logo KZAR Coaching" class="social-modal-logo">
+                <h3>PLAN INDYWIDUALNY</h3>
             </div>
             
             <p class="social-desc" style="text-align: left; font-size: 12.5px;">
-                Darmowe Klasyki to super opcja na start, ale <strong>indywidualny plan treningowy to zupełnie inny poziom efektów!</strong><br><br>
-                🔥 Plan dopasowany w 100% pod Twoją anatomię, cel, staż oraz sprzęt.<br>
-                🔥 Stała opieka, periodyzacja i korekta techniki.<br>
-                🔥 Eliminacja braków i ciągły progres bez przestojów.
+                Potrzebujesz planu dopasowanego do swojego celu, doświadczenia i sprzętu? Skontaktuj się z trenerem, aby omówić współpracę.<br><br>
+                Indywidualny dobór ćwiczeń, planowanie progresu i bieżące wsparcie treningowe.
             </p>
 
             <div class="social-links-list">
                 <a href="https://instagram.com/" target="_blank" class="social-link-btn instagram">
-                    <i data-lucide="instagram"></i> Napisz na Instagramie
+                    <i data-lucide="instagram"></i> Napisz do trenera na Instagramie
                 </a>
                 <a href="https://wa.me/" target="_blank" class="social-link-btn whatsapp">
                     <i data-lucide="message-circle"></i> Szybki kontakt WhatsApp
@@ -202,12 +203,12 @@
     <div id="socialModal" class="modal">
         <div class="modal-box social-box">
             <div class="social-header">
-                <img src="logo.png" alt="Koziar Fit Logo" class="social-modal-logo">
-                <h3>WSPÓŁPRACA INDYWIDUALNA</h3>
+                <img src="logo.png" alt="Logo KZAR Coaching" class="social-modal-logo">
+                <h3>KONTAKT Z TRENEREM</h3>
             </div>
             
             <p class="social-desc">
-                Szukasz indywidualnego planu treningowego, prowadzenia online lub chcesz wznieść swoje wyniki na wyższy poziom? Skontaktuj się ze mną bezpośrednio!
+                Chcesz omówić indywidualny plan lub współpracę treningową? Wybierz dogodny kanał kontaktu.
             </p>
 
             <div class="social-links-list">

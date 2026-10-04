@@ -32,19 +32,24 @@ var plans = JSON.parse(localStorage.getItem('koziar_plans')) || {};
 var currentPlan = localStorage.getItem('koziar_current_plan') || '';
 var checks = JSON.parse(localStorage.getItem('koziar_checks')) || {};
 
-function isClassicPlan(planName) {
-    if (!planName) return false;
-    const lower = planName.toLowerCase();
-    const p = plans[planName];
+const CLASSIC_PLAN_NAMES = new Set(['basic1', 'basic2', 'basic3']);
 
-    if (p && p.isLocked) return true;
-    if (lower === 'basic1' || lower === 'basic2' || lower === 'basic3') return true;
-    if (lower.includes('basic1') || lower.includes('basic2') || lower.includes('basic3')) {
-        if (!lower.includes('kopia') && !lower.includes('mój plan') && !lower.includes('moj plan')) {
-            return true;
-        }
-    }
-    return false;
+function isClassicPlan(planName) {
+    return typeof planName === 'string' && CLASSIC_PLAN_NAMES.has(planName.trim().toLowerCase());
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, character => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[character]);
+}
+
+function inlineStringArgument(value) {
+    return escapeHtml(JSON.stringify(String(value)));
 }
 
 function saveAll() {
@@ -61,7 +66,7 @@ function saveAll() {
 async function syncPlanToCloud(planName) {
     if (!window.sbClient || !planName) return;
     const p = plans[planName];
-    if (!p || p.isLocked || isClassicPlan(planName)) return;
+    if (!p || (isClassicPlan(planName) && !isAdmin)) return;
 
     try {
         const targetDeviceId = p.ownerDeviceId || deviceId;
@@ -76,11 +81,12 @@ async function syncPlanToCloud(planName) {
             updated_at: new Date().toISOString()
         };
 
-        await window.sbClient
+        const { error } = await window.sbClient
             .from('user_plans')
             .upsert(payload, { onConflict: 'user_device_id, plan_name' });
+        if (error) console.warn("Nie udało się zapisać planu w chmurze:", error.message);
     } catch (err) {
-        console.warn("Brak połączenia z chmurą.");
+        console.warn("Brak połączenia z chmurą:", err);
     }
 }
 
@@ -91,7 +97,7 @@ async function loadPlansFromCloud() {
 
         // Jeśli to nie admin, pobieramy plany użytkownika LUB ogólnodostępne Klasyki
         if (!isAdmin) {
-            let filterString = `user_device_id.eq.${deviceId},plan_name.ilike.%basic%`;
+            let filterString = `user_device_id.eq.${deviceId},plan_name.in.(basic1,basic2,basic3)`;
             if (unlockedKeys.length > 0) {
                 filterString += `,access_key.in.("${unlockedKeys.join('","')}")`;
             }
@@ -116,7 +122,16 @@ async function loadPlansFromCloud() {
                 }
             });
 
-            plans = loadedPlans;
+            if (isAdmin) {
+                plans = loadedPlans;
+            } else {
+                const localUserPlans = Object.fromEntries(
+                    Object.entries(plans).filter(([name, plan]) =>
+                        !hiddenPlans.includes(name) && plan.ownerDeviceId === deviceId
+                    )
+                );
+                plans = { ...localUserPlans, ...loadedPlans };
+            }
 
             if (!isAdmin) {
                 localStorage.setItem('koziar_plans', JSON.stringify(plans));
@@ -190,9 +205,9 @@ function deleteCurrentPlan() {
     }
 }
 
-function secretAdminPrompt() {
-    const pin = prompt("Wprowadź Kod Dostępu / PIN Trenera:");
-    if (pin === ADMIN_PIN) {
+function secretAdminPrompt(prefilledPin = null) {
+    const pin = prefilledPin === null ? prompt("Wprowadź Kod Dostępu / PIN Trenera:") : prefilledPin;
+    if (pin && pin.trim() === ADMIN_PIN) {
         isAdmin = true;
         localStorage.setItem('koziar_is_admin', 'true');
         alert("Zalogowano w trybie TRENERA!");
@@ -251,12 +266,12 @@ function openIndividualPlanModal() {
 
 function unlockClassicPlanCopy() {
     const sourcePlan = plans[currentPlan];
-    if (!sourcePlan) return;
+    if (!sourcePlan || !isClassicPlan(currentPlan)) return;
 
     let copyName = currentPlan + " (Mój Plan)";
     let counter = 1;
 
-    while (plans[copyName]) {
+    while (plans[copyName] || hiddenPlans.includes(copyName)) {
         counter++;
         copyName = `${currentPlan} (Mój Plan ${counter})`;
     }
@@ -281,6 +296,7 @@ function importPlanData(suggestedName, notes, data) {
     const name = prompt("Nazwa dla importowanego planu:", defaultName);
     if (name && name.trim()) {
         const finalName = name.trim();
+        if (plans[finalName] && !confirm(`Plan "${finalName}" już istnieje. Czy chcesz go zastąpić?`)) return;
         plans[finalName] = { isLocked: false, notes: notes || "", data: data || [], ownerDeviceId: deviceId };
         currentPlan = finalName;
         saveAll();
@@ -296,7 +312,7 @@ function handleImportOrKey() {
     if (!val) return;
 
     if (val === ADMIN_PIN) {
-        secretAdminPrompt();
+        secretAdminPrompt(val);
         closeModals();
         return;
     }
@@ -351,15 +367,17 @@ function initPlanSelect() {
     select.innerHTML = "";
     
     const gOfficial = document.createElement("optgroup");
-    gOfficial.label = "📋 KLASYKI KOZIARA";
+    gOfficial.label = "PLANY BEZPŁATNE";
     const gUser = document.createElement("optgroup");
     gUser.label = isAdmin ? "👑 WSZYSTKIE PLANY (TRENER)" : "💪 TWOJE PLANY";
 
     Object.keys(plans).forEach(name => {
         if (!hiddenPlans.includes(name) || isAdmin) {
             const keyTag = plans[name].accessKey ? ` 🔑[${plans[name].accessKey}]` : '';
-            const opt = new Option(name + keyTag, name);
-            if (isClassicPlan(name)) {
+            const isClassic = isClassicPlan(name);
+            const displayName = isClassic ? `Basic ${name.slice(-1)}` : name;
+            const opt = new Option(displayName + keyTag, name);
+            if (isClassic) {
                 gOfficial.appendChild(opt);
             } else {
                 gUser.appendChild(opt);
@@ -390,7 +408,7 @@ function loadPlan() {
 
 function saveNotes() {
     const el = document.getElementById("planNotes");
-    if (el && plans[currentPlan] && !isClassicPlan(currentPlan)) {
+    if (el && plans[currentPlan] && (isAdmin || !isClassicPlan(currentPlan))) {
         plans[currentPlan].notes = el.value;
         saveAll();
     }
@@ -426,6 +444,10 @@ function setMode(mode) {
 function initExcel() {
     const container = document.getElementById('excelContainer');
     if (!container) return;
+    if (hotInstance) {
+        hotInstance.destroy();
+        hotInstance = null;
+    }
     container.style.display = 'block';
     container.innerHTML = '';
 
@@ -445,7 +467,7 @@ function initExcel() {
         manualColumnResize: true,
         manualRowResize: true,
         stretchH: 'all',
-        readOnly: p.isLocked || isClassicPlan(currentPlan)
+        readOnly: !isAdmin && isClassicPlan(currentPlan)
     });
 }
 
@@ -453,15 +475,23 @@ function addExcelRow() { if (hotInstance) hotInstance.alter('insert_row_below');
 function addExcelCol() { if (hotInstance) hotInstance.alter('insert_col_right'); }
 
 function saveExcelChanges() {
-    if (hotInstance && plans[currentPlan] && !isClassicPlan(currentPlan)) {
+    if (hotInstance && plans[currentPlan] && (isAdmin || !isClassicPlan(currentPlan))) {
         plans[currentPlan].data = hotInstance.getData();
         saveAll();
+    }
+    if (hotInstance) {
+        hotInstance.destroy();
+        hotInstance = null;
     }
     setMode('basic');
 }
 
 function cancelExcelChanges() {
     tempExcelData = null;
+    if (hotInstance) {
+        hotInstance.destroy();
+        hotInstance = null;
+    }
     setMode('basic');
 }
 
@@ -528,7 +558,7 @@ function parseSheetToStructure() {
 }
 
 function ensurePlanEditable() {
-    if (isClassicPlan(currentPlan)) {
+    if (!isAdmin && isClassicPlan(currentPlan)) {
         unlockClassicPlanCopy();
     }
 }
@@ -608,6 +638,7 @@ function renderGymView() {
     if (!p) {
         if (gymView) gymView.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-dim);">Brak dostępnych planów. Pobieranie z bazy danych...</div>';
         if (overlay) overlay.style.display = "none";
+        document.body.classList.remove("classic-preview-active");
         return;
     }
 
@@ -615,13 +646,15 @@ function renderGymView() {
 
     if (isLockedClassic) {
         if (overlay) overlay.style.display = "flex";
-        if (notesContainer) notesContainer.classList.add("classic-blurred-view");
+        document.body.classList.add("classic-preview-active");
         if (gymView) gymView.classList.add("classic-blurred-view");
     } else {
         if (overlay) overlay.style.display = "none";
-        if (notesContainer) notesContainer.classList.remove("classic-blurred-view");
+        document.body.classList.remove("classic-preview-active");
         if (gymView) gymView.classList.remove("classic-blurred-view");
     }
+
+    if (notesContainer) notesContainer.classList.toggle("classic-preview-notes", isLockedClassic);
 
     const notesEl = document.getElementById("planNotes");
     if (notesEl) {
@@ -658,19 +691,19 @@ function renderGymView() {
         return `
         <div class="day-card ${day.isRest ? 'rest-day' : ''} ${hasAnyCheckedInDay ? 'active-day' : ''}">
             <div class="day-header">
-                <span>${day.name}</span>
+                <span>${escapeHtml(day.name)}</span>
                 ${day.isRest ? '<span class="rest-badge">REGENERACJA</span>' : ''}
             </div>
             
             ${!day.isRest ? `
             <div class="table-wrapper">
-                <div class="table-grid">
+                <div class="table-grid ${currentMode === 'basic' ? 'basic-table-grid' : ''}" ${currentMode === 'basic' ? `style="--basic-data-columns:${activeHeaders.length}"` : ''}>
                     <div class="row-grid row-header">
                         ${currentMode === 'pro' ? '<div class="col-cell expand-col"></div>' : ''}
                         <div class="col-cell check-col">✔</div>
                         <div class="col-cell nr-col">Nr</div>
                         <div class="col-cell name-col">Ćwiczenie</div>
-                        ${activeHeaders.map(h => `<div class="col-cell">${h.name}</div>`).join('')}
+                        ${activeHeaders.map(h => `<div class="col-cell">${escapeHtml(h.name)}</div>`).join('')}
                     </div>
 
                     ${day.exercises.map((ex, ei) => {
@@ -685,25 +718,25 @@ function renderGymView() {
                             <div class="row-grid ${mainChecked ? 'done' : ''}">
                                 ${currentMode === 'pro' ? `
                                 <div class="col-cell expand-col">
-                                    <button class="btn-expand" onclick="toggleExpand('${key}')">
+                                    <button class="btn-expand" onclick="toggleExpand(${inlineStringArgument(key)})">
                                         <i data-lucide="${isExpanded ? 'chevron-down' : 'chevron-right'}" style="width:14px"></i>
                                     </button>
                                 </div>` : ''}
                                 
                                 <div class="col-cell check-col">
-                                    <input type="checkbox" ${mainChecked ? 'checked' : ''} ${isCheckDisabled} onchange="toggleCheck('${key}', 'main', this.checked, ${count})">
+                                    <input type="checkbox" ${mainChecked ? 'checked' : ''} ${isCheckDisabled} onchange="toggleCheck(${inlineStringArgument(key)}, 'main', this.checked, ${count})">
                                 </div>
                                 <div class="col-cell nr-col">
-                                    <input type="text" class="cell-input" value="${ex.nr}" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex}, 0, this.value)">
+                                    <input type="text" class="cell-input" value="${escapeHtml(ex.nr)}" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex}, 0, this.value)">
                                 </div>
                                 <div class="col-cell name-col">
-                                    <input type="text" class="cell-input" style="text-align:left;" value="${ex.name}" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex}, 1, this.value)">
+                                    <textarea class="cell-input name-input" rows="${Math.max(1, Math.ceil(String(ex.name || '').length / (window.innerWidth <= 360 ? 14 : 18)))}" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex}, 1, this.value)">${escapeHtml(ex.name)}</textarea>
                                 </div>
                                 ${activeHeaders.map(h => {
                                     const cellData = ex.data[h.name] || { val: '', colIdx: h.colIdx };
                                     return `
                                         <div class="col-cell">
-                                            <input type="text" class="cell-input" value="${cellData.val}" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex},${cellData.colIdx}, this.value)">
+                                            <input type="text" class="cell-input" value="${escapeHtml(cellData.val)}" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex},${cellData.colIdx}, this.value)">
                                         </div>
                                     `;
                                 }).join('')}
@@ -713,22 +746,32 @@ function renderGymView() {
                                 const subChecked = checks[key]?.[`sub_${s}`] || false;
                                 const subNr = `${ex.nr}.${s+1}`;
 
-                                const existingSubRow = plans[currentPlan].data.find(r => r && r[0] === subNr);
+                                let existingSubRow = null;
+                                for (let rowIndex = ex.rowIndex + 1; rowIndex < plans[currentPlan].data.length; rowIndex++) {
+                                    const row = plans[currentPlan].data[rowIndex];
+                                    if (!row) continue;
+                                    const rowNr = String(row[0] || '');
+                                    if (rowNr === subNr) {
+                                        existingSubRow = row;
+                                        break;
+                                    }
+                                    if (rowNr && !rowNr.includes('.')) break;
+                                }
 
                                 return `
                                     <div class="row-grid sub-row ${subChecked ? 'done' : ''}">
                                         <div class="col-cell expand-col"></div>
                                         <div class="col-cell check-col">
-                                            <input type="checkbox" ${subChecked ? 'checked' : ''} ${isCheckDisabled} onchange="toggleCheck('${key}', 'sub_${s}', this.checked, ${count})">
+                                            <input type="checkbox" ${subChecked ? 'checked' : ''} ${isCheckDisabled} onchange="toggleCheck(${inlineStringArgument(key)}, 'sub_${s}', this.checked, ${count})">
                                         </div>
-                                        <div class="col-cell nr-col" style="font-size:10px;">${subNr}</div>
+                                        <div class="col-cell nr-col" style="font-size:10px;">${escapeHtml(subNr)}</div>
                                         <div class="col-cell name-col" style="font-size:11px; color:var(--text-dim);">Seria ${s+1}</div>${activeHeaders.map(h => {
                                             if (h.name.toUpperCase() === 'S') return `<div class="col-cell" style="color:var(--text-dim);">-</div>`;
-                                            let subVal = existingSubRow ? (existingSubRow[h.colIdx] || '') : '';
+                                            let subVal = existingSubRow ? (existingSubRow[h.colIdx] ?? '') : '';
                                             if (subVal === 'null' || subVal === null || subVal === undefined) subVal = '';
                                             return `
                                                 <div class="col-cell">
-                                                    <input type="text" class="cell-input" value="${subVal}" ${isReadOnlyAttr} placeholder="-" onchange="updateSubSetCellDirectly(${ex.rowIndex}, ${s}, '${h.name}', this.value)">
+                                                    <input type="text" class="cell-input" value="${escapeHtml(subVal)}" ${isReadOnlyAttr} placeholder="-" onchange="updateSubSetCellDirectly(${ex.rowIndex}, ${s}, ${inlineStringArgument(h.name)}, this.value)">
                                                 </div>
                                             `;
                                         }).join('')}
@@ -752,7 +795,9 @@ function newPlan() {
     if (currentMode === 'edit') return;
     const name = prompt("Nazwa nowego planu:");
     if (name && name.trim()) {
-        plans[name] = {
+        const finalName = name.trim();
+        if (plans[finalName]) return alert(`Plan "${finalName}" już istnieje. Wybierz inną nazwę.`);
+        plans[finalName] = {
             isLocked: false,
             notes: "",
             ownerDeviceId: deviceId,
@@ -762,7 +807,7 @@ function newPlan() {
                 ["1", "Wyciskanie leżąc", "3", "10", "60", "2", "90s"]
             ]
         };
-        currentPlan = name;
+        currentPlan = finalName;
         saveAll();
         initPlanSelect();
         renderGymView();
@@ -771,8 +816,12 @@ function newPlan() {
 
 function resetWeek() {
     if (currentMode === 'edit') return;
+    if (!isAdmin && isClassicPlan(currentPlan)) return;
     if (confirm("Resetować zaznaczone serie i podświetlenia?")) {
-        checks = {};
+        const planPrefix = `${currentPlan}-`;
+        Object.keys(checks).forEach(key => {
+            if (key.startsWith(planPrefix)) delete checks[key];
+        });
         saveAll();
         renderGymView();
     }
@@ -902,8 +951,8 @@ function downloadXLSXStyled() {
     
     const colHeaders = ["Nr", "Ćwiczenie", ...headers.map(h => h.name)];
 
-    const COLOR_GOLD_HEADER = "#E5B024"; 
-    const COLOR_DAY_ACTIVE = "#F1C232";  
+    const COLOR_GOLD_HEADER = "#E5B024";
+    const COLOR_DAY_ACTIVE = "#F1C232";
     const COLOR_DAY_REST = "#666666";    
     const COLOR_TEXT_DARK = "#000000";
     const COLOR_TEXT_LIGHT = "#FFFFFF";
@@ -1020,7 +1069,7 @@ function downloadXLSXStyled() {
             <tr height="12"><td colspan="${colHeaders.length}" style="border:none; background-color:#ffffff;"></td></tr>
             <tr height="25" style="height:25pt; background-color:#111111;">
                 <td colspan="${colHeaders.length}" style="border:1px solid ${COLOR_BORDER}; background-color:#111111; color:${COLOR_GOLD_HEADER}; text-align:center; font-size:9pt; font-weight:bold; white-space:nowrap;">
-                    ⚡ Wygenerowano w aplikacji KOZIAR FIT ⚡
+                    Wygenerowano w aplikacji KZAR Coaching
                 </td>
             </tr>
         </table>
@@ -1031,14 +1080,14 @@ function downloadXLSXStyled() {
     const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = "KOZIAR_FIT_" + currentPlan.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".xls";
+    link.download = "KZAR_COACHING_" + currentPlan.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".xls";
     link.click();
 }
 
 function downloadTSV() {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([document.getElementById("exportText").value], { type: "text/tab-separated-values" }));
-    a.download = "KOZIAR_FIT_" + currentPlan.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".tsv";
+    a.download = "KZAR_COACHING_" + currentPlan.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".tsv";
     a.click();
 }
 

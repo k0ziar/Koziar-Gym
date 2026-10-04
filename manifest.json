@@ -1,6 +1,6 @@
 {
-  "short_name": "KoziarFit",
-  "name": "KOZIAR FIT - Plan Treningowy",
+  "short_name": "KZAR",
+  "name": "KZAR Coaching - plany treningowe",
   "icons": [
     {
       "src": "logo.png",
@@ -21,8 +21,8 @@
     }
   ],
   "start_url": "./index.html",
-  "background_color": "#1a1a1a",
-  "theme_color": "#E5B024",
+  "background_color": "#0d0d0d",
+  "theme_color": "#0d0d0d",
   "display": "standalone",
   "orientation": "portrait"
 }
