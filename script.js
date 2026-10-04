@@ -286,7 +286,7 @@ function openExport() {
     if (!p) return;
 
     let lines = [`!!NOTES!!\t${(p.notes || "").replace(/\n/g, "[BR]")}`];
-    (p.data || []).forEach(r => lines.push(r.join("\t")));
+    (p.data || []).forEach(r => lines.push((r || []).map(cell => (cell === null || cell === undefined || cell === "null") ? "" : cell).join("\t")));
     
     document.getElementById("exportText").value = lines.join("\n");
     
@@ -409,7 +409,6 @@ function cancelExcelChanges() {
     setMode('basic');
 }
 
-// STRUKTURA PLANU
 function parseSheetToStructure() {
     const raw = plans[currentPlan]?.data || [];
     let days = [];
@@ -425,8 +424,9 @@ function parseSheetToStructure() {
         if (col0.toLowerCase() === 'nr' || col1.toLowerCase() === 'ćwiczenie') {
             customHeaders = [];
             for (let i = 2; i < row.length; i++) {
-                if (row[i] !== null && row[i] !== '') {
-                    customHeaders.push({ name: String(row[i]).trim(), colIdx: i });
+                const headerName = String(row[i] || '').trim();
+                if (headerName !== '') {
+                    customHeaders.push({ name: headerName, colIdx: i });
                 }
             }
             return;
@@ -446,10 +446,8 @@ function parseSheetToStructure() {
         } else if (currentDay && (col0 !== '' || col1 !== '')) {
             let rowData = {};
             customHeaders.forEach(h => {
-                rowData[h.name] = {
-                    val: row[h.colIdx] !== undefined && row[h.colIdx] !== null ? row[h.colIdx] : '',
-                    colIdx: h.colIdx
-                };
+                const val = (row[h.colIdx] !== undefined && row[h.colIdx] !== null && row[h.colIdx] !== 'null') ? row[h.colIdx] : '';
+                rowData[h.name] = { val, colIdx: h.colIdx };
             });
 
             currentDay.exercises.push({
@@ -652,7 +650,8 @@ function renderGymView() {
                                         <div class="col-cell nr-col" style="font-size:10px;">${subNr}</div>
                                         <div class="col-cell name-col" style="font-size:11px; color:var(--text-dim);">Seria ${s+1}</div>${activeHeaders.map(h => {
                                             if (h.name.toUpperCase() === 'S') return `<div class="col-cell" style="color:var(--text-dim);">-</div>`;
-                                            const subVal = existingSubRow ? (existingSubRow[h.colIdx] || '') : '';
+                                            let subVal = existingSubRow ? (existingSubRow[h.colIdx] || '') : '';
+                                            if (subVal === 'null' || subVal === null || subVal === undefined) subVal = '';
                                             return `
                                                 <div class="col-cell">
                                                     <input type="text" class="cell-input" value="${subVal}" ${isReadOnlyAttr} placeholder="-" onchange="updateSubSetCellDirectly(${ex.rowIndex}, ${s}, '${h.name}', this.value)">
@@ -684,9 +683,9 @@ function newPlan() {
             notes: "",
             ownerDeviceId: deviceId,
             data: [
-                ["Dzień 1 - Trening A", "", "", "", "", ""],
-                ["Nr", "Ćwiczenie", "S", "P", "KG", "REST"],
-                ["1", "Wyciskanie leżąc", "3", "10", "60", "90s"]
+                ["Dzień 1 - Trening A", "", "", "", "", "", ""],
+                ["Nr", "Ćwiczenie", "S", "P", "KG", "RIR", "REST"],
+                ["1", "Wyciskanie leżąc", "3", "10", "60", "2", "90s"]
             ]
         };
         currentPlan = name;
@@ -705,9 +704,8 @@ function resetWeek() {
     }
 }
 
-// Konwersja komórek Excela ze stałym przeliczeniem amerykańskiego formatu dat na numery podserii (M.D -> Month.Day)
 function formatExcelCell(val) {
-    if (val === null || val === undefined) return "";
+    if (val === null || val === undefined || val === 'null') return "";
     
     if (val instanceof Date) {
         const month = val.getMonth() + 1;
@@ -717,7 +715,6 @@ function formatExcelCell(val) {
 
     let strVal = String(val).trim();
 
-    // Dla numerów seryjnych daty w Excelu (np. 46023 = 1 Stycznia -> 1.1, 46024 = 2 Stycznia -> 1.2)
     if (!isNaN(val) && Number(val) >= 40000 && Number(val) <= 50000) {
         const excelDate = new Date(Math.round((Number(val) - 25569) * 86400 * 1000));
         const month = excelDate.getUTCMonth() + 1;
@@ -739,10 +736,9 @@ function parseExcelToPlan(workbook) {
     let data = [];
     let readingNotes = false;
 
-    // Pobranie WSZYSTKICH kolumn tabeli (zarówno BASIC jak i PRO)
     let headers = ["Nr", "Ćwiczenie", "S", "P", "KG"];
     for (let r = 0; r < rawRows.length; r++) {
-        const row = rawRows[r].map(c => String(c).trim());
+        const row = rawRows[r].map(c => String(c || '').trim());
         if (row.length >= 2 && row[0].toLowerCase() === "nr" && row[1].toLowerCase() === "ćwiczenie") {
             headers = row.filter(c => c !== "");
             break;
@@ -754,24 +750,21 @@ function parseExcelToPlan(workbook) {
 
     for (let r = 0; r < rawRows.length; r++) {
         const rawRow = rawRows[r];
-        if (!rawRow || rawRow.every(cell => String(cell).trim() === "")) continue;
+        if (!rawRow || rawRow.every(cell => cell === null || cell === undefined || String(cell).trim() === "")) continue;
 
         const row = rawRow.map(c => formatExcelCell(c));
         const firstCell = row[0] || "";
 
-        // Tytuł planu
         if (firstCell.startsWith("⚡ PLAN:")) {
             planTitle = firstCell.replace("⚡ PLAN:", "").replace(/⚡/g, "").trim();
             continue;
         }
 
-        // Sekcja notatek
         if (firstCell.includes("📌 NOTATKI DO PLANU:")) {
             readingNotes = true;
             continue;
         }
 
-        // Pomijanie stopki oraz wiersza nagłówków
         if (firstCell.startsWith("⚡ Wygenerowano") || firstCell.toLowerCase() === "nr") {
             readingNotes = false;
             continue;
@@ -784,7 +777,8 @@ function parseExcelToPlan(workbook) {
 
         let formattedRow = new Array(headers.length).fill("");
         for (let colIdx = 0; colIdx < headers.length; colIdx++) {
-            formattedRow[colIdx] = row[colIdx] !== undefined ? row[colIdx] : "";
+            const cVal = row[colIdx];
+            formattedRow[colIdx] = (cVal !== undefined && cVal !== null && cVal !== 'null') ? cVal : "";
         }
 
         const col0 = formattedRow[0];
@@ -846,7 +840,6 @@ function downloadXLSXStyled() {
     const rawData = p.data || [];
     const { headers } = parseSheetToStructure();
     
-    // Zawsze eksportujemy PEŁNY zestaw kolumn z danych (zarówno PRO jak i BASIC)
     const colHeaders = ["Nr", "Ćwiczenie", ...headers.map(h => h.name)];
 
     const COLOR_GOLD_HEADER = "#E5B024"; 
@@ -889,7 +882,6 @@ function downloadXLSXStyled() {
                 ${headers.map(() => '<col width="80" style="width:80pt; mso-width-source:userset;" />').join('')}
             </colgroup>
 
-            <!-- NAGŁÓWEK GŁÓWNY PLANU -->
             <tr height="30" style="height:30pt; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; color:${COLOR_TEXT_DARK};">
                 <td colspan="${colHeaders.length}" style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-size:12pt; font-weight:bold; white-space:nowrap;">
                     ⚡ PLAN: ${currentPlan.toUpperCase()} ⚡
@@ -923,7 +915,7 @@ function downloadXLSXStyled() {
     let dataRowCounter = 0;
 
     rawData.forEach((row) => {
-        if (!row || row.every(c => c === null || c === '')) return;
+        if (!row || row.every(c => c === null || c === undefined || c === '')) return;
 
         const col0 = String(row[0] || '').trim();
         const col1 = String(row[1] || '').trim();
@@ -951,11 +943,13 @@ function downloadXLSXStyled() {
             const isSubRow = col0.includes('.') || col1.toLowerCase().includes('(seria');
             const exerciseNameDisplay = isSubRow ? '' : (row[1] || '');
 
+            const cleanCell = (val) => (val === null || val === undefined || val === 'null') ? '' : val;
+
             htmlContent += `
                 <tr height="22" style="height:22pt; background-color:${bgRow};">
-                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap; ${isSubRow ? 'font-size:8.5pt; color:#666666;' : ''}">${row[0] || ''}</td>
-                    <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgRow}; white-space:nowrap; font-weight:${isSubRow ? 'normal' : 'bold'};">${exerciseNameDisplay}</td>
-                    ${headers.map(h => `<td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${row[h.colIdx] !== undefined ? row[h.colIdx] : ''}</td>`).join('')}
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap; ${isSubRow ? 'font-size:8.5pt; color:#666666;' : ''}">${cleanCell(row[0])}</td>
+                    <td style="border:1px solid ${COLOR_BORDER}; text-align:left; background-color:${bgRow}; white-space:nowrap; font-weight:${isSubRow ? 'normal' : 'bold'};">${cleanCell(exerciseNameDisplay)}</td>
+                    ${headers.map(h => `<td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${bgRow}; white-space:nowrap;">${cleanCell(row[h.colIdx])}</td>`).join('')}
                 </tr>
             `;
             dataRowCounter++;
