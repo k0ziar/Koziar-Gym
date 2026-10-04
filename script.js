@@ -229,6 +229,21 @@ function openSocialModal() {
     document.getElementById("socialModal").classList.add("active");
 }
 
+function importPlanData(suggestedName, notes, data) {
+    const defaultName = suggestedName || "Importowany Plan";
+    const name = prompt("Nazwa dla importowanego planu:", defaultName);
+    if (name && name.trim()) {
+        const finalName = name.trim();
+        plans[finalName] = { isLocked: false, notes: notes || "", data: data || [], ownerDeviceId: deviceId };
+        currentPlan = finalName;
+        saveAll();
+        initPlanSelect();
+        closeModals();
+        renderGymView();
+        alert(`Plan "${finalName}" został pomyślnie zaimportowany!`);
+    }
+}
+
 function handleImportOrKey() {
     const val = document.getElementById("importInputVal").value.trim();
     if (!val) return;
@@ -253,15 +268,7 @@ function handleImportOrKey() {
             }
         });
 
-        const name = prompt("Nazwa dla importowanego planu:", "Importowany Plan");
-        if (name && name.trim()) {
-            plans[name] = { isLocked: false, notes, data, ownerDeviceId: deviceId };
-            currentPlan = name;
-            saveAll();
-            initPlanSelect();
-            closeModals();
-            renderGymView();
-        }
+        importPlanData("Importowany Plan", notes, data);
     } else {
         if (!unlockedKeys.includes(val)) {
             unlockedKeys.push(val);
@@ -430,9 +437,10 @@ function parseSheetToStructure() {
             return s.includes('rest') || s.includes('wolne') || s.includes('pauza') || s.includes('regeneracja');
         };
 
-        if (col0.toLowerCase().startsWith('dzień') || (col0 && !col1 && isNaN(col0))) {
+        if (col0.toLowerCase().startsWith('dzień') || col0.startsWith('#') || (col0 && !col1 && isNaN(col0))) {
             const isRest = isRestWord(col0) || isRestWord(col1);
-            const fullDayTitle = col1 ? `${col0} - ${col1}` : col0;
+            let fullDayTitle = col1 ? `${col0} - ${col1}` : col0;
+            if (fullDayTitle.startsWith('# ')) fullDayTitle = fullDayTitle.substring(2);
             currentDay = { name: fullDayTitle, isRest, exercises: [] };
             days.push(currentDay);
         } else if (currentDay && (col0 !== '' || col1 !== '')) {
@@ -485,65 +493,6 @@ function updateCellDirectly(rowIndex, colIndex, value) {
 
     saveAll();
     renderGymView();
-}
-
-function reorderAndRenumberPlan(planData) {
-    let currentDayIndex = -1;
-    let days = [];
-
-    // 1. Podział danych na poszczególne dni
-    planData.forEach(row => {
-        if (!row) return;
-        const col0 = String(row[0] || '').trim();
-        const col1 = String(row[1] || '').trim();
-
-        // Wykrywanie nagłówka dnia
-        if (col0.toLowerCase().startsWith('dzień') || (col0 && !col1 && isNaN(col0))) {
-            currentDayIndex++;
-            days[currentDayIndex] = { header: row, exercises: [] };
-        } else if (currentDayIndex >= 0) {
-            days[currentDayIndex].exercises.push(row);
-        }
-    });
-
-    // 2. Sortowanie i przenumerowywanie NIEZALEŻNIE w każdym dniu
-    let newFullData = [];
-
-    days.forEach(day => {
-        newFullData.push(day.header); // Dodajemy nagłówek dnia
-
-        // Główne ćwiczenia (np. 1, 2, 8) i ich podserie (1.1, 1.2)
-        let mainCounter = 1;
-        
-        // Sortujemy ćwiczenia według wprowadzonego numeru (tylko liczby całkowite)
-        day.exercises.sort((a, b) => {
-            let numA = parseFloat(a[0]) || 0;
-            let numB = parseFloat(b[0]) || 0;
-            return numA - numB;
-        });
-
-        let currentMainNum = 0;
-        let subCounter = 1;
-
-        day.exercises.forEach(exRow => {
-            let numStr = String(exRow[0] || '');
-
-            // Jeśli to podseria (np. zawiera kropkę lub była podserią)
-            if (numStr.includes('.')) {
-                exRow[0] = `${currentMainNum}.${subCounter}`;
-                subCounter++;
-            } else {
-                // Nowe główne ćwiczenie
-                currentMainNum = mainCounter;
-                exRow[0] = String(mainCounter);
-                mainCounter++;
-                subCounter = 1; // reset podserii
-            }
-            newFullData.push(exRow);
-        });
-    });
-
-    return newFullData;
 }
 
 function updateSubSetCellDirectly(parentRowIndex, setIdx, headerName, value) {
@@ -767,7 +716,6 @@ function downloadXLSXStyled() {
 
     const rawData = p.data || [];
 
-    // Paleta kolorów MSO dla Excel / OpenOffice / LibreOffice
     const COLOR_GOLD_HEADER = "#E5B024"; 
     const COLOR_DAY_ACTIVE = "#F1C232";  
     const COLOR_DAY_REST = "#666666";    
@@ -818,7 +766,6 @@ function downloadXLSXStyled() {
             </tr>
     `;
 
-    // 1. NOTATKI NA SAMEJ GÓRZE PLANU (JEŚLI ISTNIEJĄ)
     if (p.notes && p.notes.trim()) {
         const formattedNotes = p.notes.replace(/\n/g, '<br>');
         htmlContent += `
@@ -836,7 +783,6 @@ function downloadXLSXStyled() {
         `;
     }
 
-    // NAGŁÓWKI KOLUMN DANYCH
     htmlContent += `
             <tr height="25" style="height:25pt; background-color:${COLOR_GOLD_HEADER}; font-weight:bold; color:${COLOR_TEXT_DARK};">
                 <td style="border:1px solid ${COLOR_BORDER}; text-align:center; background-color:${COLOR_GOLD_HEADER}; font-weight:bold;">Nr</td>
@@ -857,8 +803,7 @@ function downloadXLSXStyled() {
 
         const isRest = col0.toLowerCase().includes('rest') || col1.toLowerCase().includes('rest');
 
-        // NAGŁÓWEK DZIEŃ (NP. DZIEŃ 1 - FBW A)
-        if (col0.toLowerCase().startsWith('dzień') || (col0 && !col1 && isNaN(col0))) {
+        if (col0.toLowerCase().startsWith('dzień') || col0.startsWith('#') || (col0 && !col1 && isNaN(col0))) {
             const dayTitle = col1 ? `${col0} ${col1}` : col0;
             const bgDay = isRest ? COLOR_DAY_REST : COLOR_DAY_ACTIVE;
             const textDay = isRest ? COLOR_TEXT_LIGHT : COLOR_TEXT_DARK;
@@ -876,14 +821,9 @@ function downloadXLSXStyled() {
         else if (col0.toLowerCase() === 'nr' || col1.toLowerCase() === 'ćwiczenie') {
             return;
         } 
-        // WIERSZE Z ĆWICZENIAMI / SERIAMI
         else {
             const bgRow = (dataRowCounter % 2 === 1) ? COLOR_ROW_ALT : "#FFFFFF";
-            
-            // Wykrywanie podserii (kropka w numerze LUB dopisek "(Seria" w nazwie)
             const isSubRow = col0.includes('.') || col1.toLowerCase().includes('(seria');
-
-            // CZYŚCIMY NAZWĘ: Jeśli to podseria, komórka na nazwę ma być ABSOLUTNIE PUSTA
             const exerciseNameDisplay = isSubRow ? '' : (row[1] || '');
 
             htmlContent += `
@@ -899,7 +839,6 @@ function downloadXLSXStyled() {
         }
     });
 
-    // 2. ZNAK WODNY NA SAMYM DOLE (AKTYWNY DLA KAŻDEJ KOLUMNY)
     htmlContent += `
             <tr height="12"><td colspan="5" style="border:none; background-color:#ffffff;"></td></tr>
             <tr height="25" style="height:25pt; background-color:#111111;">
@@ -926,12 +865,86 @@ function downloadTSV() {
     a.click();
 }
 
+function parseExcelToPlan(workbook) {
+    const firstSheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[firstSheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+    let planTitle = "Importowany Plan";
+    let notes = "";
+    let data = [];
+    let readingNotes = false;
+
+    for (let r = 0; r < rows.length; r++) {
+        const row = rows[r].map(c => String(c).trim());
+        if (row.every(cell => cell === "")) continue;
+
+        const firstCell = row[0] || "";
+
+        // Wychwytywanie nagłówka pliku
+        if (firstCell.startsWith("⚡ PLAN:")) {
+            planTitle = firstCell.replace("⚡ PLAN:", "").replace(/⚡/g, "").trim();
+            continue;
+        }
+
+        // Wychwytywanie notatek
+        if (firstCell.includes("📌 NOTATKI DO PLANU:")) {
+            readingNotes = true;
+            continue;
+        }
+
+        // Ignorowanie stopki i zbędnych nagłówków tabeli
+        if (firstCell.startsWith("⚡ Wygenerowano") || firstCell.toLowerCase() === "nr") {
+            readingNotes = false;
+            continue;
+        }
+
+        if (readingNotes) {
+            notes += (notes ? "\n" : "") + firstCell;
+            continue;
+        }
+
+        // Zapisywanie wierszy z ćwiczeniami i dniami
+        data.push([
+            row[0] || "",
+            row[1] || "",
+            row[2] || "",
+            row[3] || "",
+            row[4] || ""
+        ]);
+    }
+
+    // Dodanie domyślnego nagłówka kolumn
+    data.unshift(["Nr", "Ćwiczenie", "S", "P", "KG"]);
+
+    importPlanData(planTitle, notes, data);
+}
+
 function handleFileSelect(e) {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => { document.getElementById("importInputVal").value = ev.target.result; };
-    reader.readAsText(file);
+
+    const fileName = file.name.toLowerCase();
+
+    if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const data = new Uint8Array(ev.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                parseExcelToPlan(workbook);
+            } catch (err) {
+                alert("Błąd podczas odczytu pliku Excel: " + err.message);
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    } else {
+        const reader = new FileReader();
+        reader.onload = (ev) => { 
+            document.getElementById("importInputVal").value = ev.target.result; 
+        };
+        reader.readAsText(file);
+    }
 }
 
 function closeModals() { document.querySelectorAll(".modal").forEach(m => m.classList.remove("active")); }

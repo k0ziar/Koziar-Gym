@@ -117,11 +117,16 @@
     <div id="importModal" class="modal">
         <div class="modal-box">
             <h3>Dodaj Plan lub Kod</h3>
-            <p style="font-size:11px; color:var(--text-dim); text-align:center;">Wpisz Kod Dostępu od Trenera, PIN Admina lub wklej plan (TSV).</p>
+            <p style="font-size:11px; color:var(--text-dim); text-align:center;">Wpisz Kod Dostępu od Trenera, PIN Admina, wklej treść TSV lub wybierz plik Excel (.xlsx / .xls).</p>
             <textarea id="importInputVal" placeholder="Kod planu / PIN / Treść TSV..."></textarea>
-            <input type="file" id="fileInput" onchange="handleFileSelect(event)" style="font-size: 11px;">
+            
+            <div style="display:flex; flex-direction:column; gap:4px;">
+                <label style="font-size:11px; font-weight:bold; color:var(--gold);">Wybierz plik z dysku (.xlsx, .xls, .tsv):</label>
+                <input type="file" id="fileInput" accept=".xlsx, .xls, .tsv, .txt" onchange="handleFileSelect(event)" style="font-size: 11px;">
+            </div>
+
             <div class="modal-actions">
-                <button class="btn btn-primary" onclick="handleImportOrKey()">Zatwierdź</button>
+                <button class="btn btn-primary" onclick="handleImportOrKey()">Zatwierdź Kod / Tekst</button>
                 <button class="btn" onclick="closeModals()">Zamknij</button>
             </div>
         </div>
