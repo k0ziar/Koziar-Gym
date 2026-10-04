@@ -705,24 +705,24 @@ function resetWeek() {
     }
 }
 
-// Funkcja pomocnicza do pobierania i przeliczania wartości komórek z pliku Excela
+// Konwersja komórek Excela ze stałym przeliczeniem amerykańskiego formatu dat na numery podserii (M.D -> Month.Day)
 function formatExcelCell(val) {
     if (val === null || val === undefined) return "";
     
     if (val instanceof Date) {
-        const d = val.getDate();
-        const m = val.getMonth() + 1;
-        return `${d}.${m}`;
+        const month = val.getMonth() + 1;
+        const day = val.getDate();
+        return `${month}.${day}`;
     }
 
     let strVal = String(val).trim();
 
-    // Jeśli komórka zawiera numer seryjny daty Excela (np. 46023 = 2026-01-01)
+    // Dla numerów seryjnych daty w Excelu (np. 46023 = 1 Stycznia -> 1.1, 46024 = 2 Stycznia -> 1.2)
     if (!isNaN(val) && Number(val) >= 40000 && Number(val) <= 50000) {
         const excelDate = new Date(Math.round((Number(val) - 25569) * 86400 * 1000));
-        const day = excelDate.getUTCDate();
         const month = excelDate.getUTCMonth() + 1;
-        return `${day}.${month}`;
+        const day = excelDate.getUTCDate();
+        return `${month}.${day}`;
     }
 
     return strVal;
@@ -739,7 +739,7 @@ function parseExcelToPlan(workbook) {
     let data = [];
     let readingNotes = false;
 
-    // Pobranie dynamicznych nagłówków tabeli (np. Nr, Ćwiczenie, S, P, KG, RIR...)
+    // Pobranie WSZYSTKICH kolumn tabeli (zarówno BASIC jak i PRO)
     let headers = ["Nr", "Ćwiczenie", "S", "P", "KG"];
     for (let r = 0; r < rawRows.length; r++) {
         const row = rawRows[r].map(c => String(c).trim());
@@ -771,7 +771,7 @@ function parseExcelToPlan(workbook) {
             continue;
         }
 
-        // Pomijanie stopki i powtórzonych nagłówków
+        // Pomijanie stopki oraz wiersza nagłówków
         if (firstCell.startsWith("⚡ Wygenerowano") || firstCell.toLowerCase() === "nr") {
             readingNotes = false;
             continue;
@@ -846,6 +846,7 @@ function downloadXLSXStyled() {
     const rawData = p.data || [];
     const { headers } = parseSheetToStructure();
     
+    // Zawsze eksportujemy PEŁNY zestaw kolumn z danych (zarówno PRO jak i BASIC)
     const colHeaders = ["Nr", "Ćwiczenie", ...headers.map(h => h.name)];
 
     const COLOR_GOLD_HEADER = "#E5B024"; 
