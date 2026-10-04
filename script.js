@@ -696,7 +696,7 @@ function renderGymView() {
             </div>
             
             ${!day.isRest ? `
-            <div class="table-wrapper">
+            <div class="table-wrapper ${currentMode === 'basic' ? 'basic-table-wrapper' : ''}">
                 <div class="table-grid ${currentMode === 'basic' ? 'basic-table-grid' : ''}" ${currentMode === 'basic' ? `style="--basic-data-columns:${activeHeaders.length}"` : ''}>
                     <div class="row-grid row-header">
                         ${currentMode === 'pro' ? '<div class="col-cell expand-col"></div>' : ''}
