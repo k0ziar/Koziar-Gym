@@ -359,7 +359,7 @@ main {
 
 .basic-table-grid .row-grid {
     display: grid;
-    grid-template-columns: 32px 36px minmax(0, 1fr) repeat(var(--basic-data-columns), minmax(30px, 1fr));
+    grid-template-columns: 32px 36px minmax(0, 1fr) repeat(var(--basic-data-columns), minmax(32px, 1fr));
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
