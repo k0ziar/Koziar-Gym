@@ -31,6 +31,7 @@ var hiddenPlans = JSON.parse(localStorage.getItem('koziar_hidden_plans')) || [];
 var plans = JSON.parse(localStorage.getItem('koziar_plans')) || {};
 var currentPlan = localStorage.getItem('koziar_current_plan') || '';
 var checks = JSON.parse(localStorage.getItem('koziar_checks')) || {};
+var resetCheckPlans = JSON.parse(localStorage.getItem('koziar_reset_check_plans')) || [];
 
 const CLASSIC_PLAN_NAMES = new Set(['basic1', 'basic2', 'basic3']);
 
@@ -58,6 +59,7 @@ function saveAll() {
     }
     localStorage.setItem('koziar_current_plan', currentPlan);
     localStorage.setItem('koziar_checks', JSON.stringify(checks));
+    localStorage.setItem('koziar_reset_check_plans', JSON.stringify(resetCheckPlans));
     localStorage.setItem('koziar_hidden_plans', JSON.stringify(hiddenPlans));
 
     syncPlanToCloud(currentPlan);
@@ -118,7 +120,14 @@ async function loadPlansFromCloud() {
                         accessKey: row.access_key,
                         ownerDeviceId: row.user_device_id
                     };
-                    if (row.checks) checks = { ...checks, ...row.checks };
+                    if (row.checks) {
+                        const cloudChecks = Object.fromEntries(
+                            Object.entries(row.checks).filter(([key]) =>
+                                !resetCheckPlans.some(name => key.startsWith(`${name}-`))
+                            )
+                        );
+                        checks = { ...checks, ...cloudChecks };
+                    }
                 }
             });
 
@@ -819,6 +828,7 @@ function resetWeek() {
     if (!isAdmin && isClassicPlan(currentPlan)) return;
     if (confirm("Resetować zaznaczone serie i podświetlenia?")) {
         const planPrefix = `${currentPlan}-`;
+        if (!resetCheckPlans.includes(currentPlan)) resetCheckPlans.push(currentPlan);
         Object.keys(checks).forEach(key => {
             if (key.startsWith(planPrefix)) delete checks[key];
         });
