@@ -700,6 +700,12 @@ input[type="checkbox"] {
     text-align: center;
 }
 
+.modal-actions .btn:only-child {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: min(100%, 220px);
+}
+
 #btnSetKey {
     grid-column: span 2;
 }
