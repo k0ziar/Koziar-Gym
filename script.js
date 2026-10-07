@@ -20,6 +20,7 @@ if (!deviceId) {
 }
 
 var currentMode = 'basic'; // basic / pro / edit
+var editView = 'visual';
 var hotInstance = null;
 var tempExcelData = null;
 var expandedExercises = {};
@@ -424,6 +425,13 @@ function saveNotes() {
 }
 
 function setMode(mode) {
+    if (mode === 'edit' && !tempExcelData) {
+        const plan = plans[currentPlan];
+        if (!plan) return;
+        tempExcelData = JSON.parse(JSON.stringify(plan.data || []));
+        ensureVisualPlanStructure();
+    }
+
     currentMode = mode;
     updateNavButtons();
 
@@ -434,13 +442,17 @@ function setMode(mode) {
     const planSelect = document.getElementById('planSelect');
 
     if (mode === 'edit') {
+        document.body.classList.add('editing-active');
         gymView.style.display = 'none';
         notesContainer.style.display = 'none';
         editArea.style.display = 'block';
         bottomNav.classList.add('nav-locked');
         planSelect.disabled = true;
-        initExcel();
+        changeEditView('visual');
     } else {
+        document.body.classList.remove('editing-active');
+        destroyExcelEditor();
+        tempExcelData = null;
         editArea.style.display = 'none';
         notesContainer.style.display = 'block';
         gymView.style.display = 'block';
@@ -450,25 +462,75 @@ function setMode(mode) {
     }
 }
 
-function initExcel() {
-    const container = document.getElementById('excelContainer');
-    if (!container) return;
+function isHeaderRow(row) {
+    const first = String(row?.[0] || '').trim().toLowerCase();
+    const second = String(row?.[1] || '').trim().toLowerCase();
+    return first === 'nr' || second === 'ćwiczenie';
+}
+
+function ensureVisualPlanStructure() {
+    if (!Array.isArray(tempExcelData)) tempExcelData = [];
+    tempExcelData = tempExcelData.map(row => Array.isArray(row) ? row : []);
+
+    let parsed = parseSheetToStructure(tempExcelData);
+    if (parsed.days.length === 0) {
+        tempExcelData.unshift(["Dzień 1 - Trening A", "", "", "", ""]);
+        parsed = parseSheetToStructure(tempExcelData);
+    }
+
+    if (!tempExcelData.some(isHeaderRow)) {
+        const firstDay = parsed.days[0];
+        tempExcelData.splice(firstDay.rowIndex + 1, 0, ["Nr", "Ćwiczenie", "S", "P", "KG"]);
+    }
+}
+
+function destroyExcelEditor() {
     if (hotInstance) {
         hotInstance.destroy();
         hotInstance = null;
     }
+}
+
+function changeEditView(view) {
+    if (currentMode !== 'edit') return;
+    if (hotInstance) {
+        tempExcelData = hotInstance.getData();
+        destroyExcelEditor();
+    }
+
+    editView = view === 'excel' ? 'excel' : 'visual';
+    const visualContainer = document.getElementById('visualEditorContainer');
+    const excelPanel = document.getElementById('excelEditorPanel');
+    const visualTab = document.getElementById('visualEditTab');
+    const excelTab = document.getElementById('excelEditTab');
+    const isVisual = editView === 'visual';
+
+    visualContainer.style.display = isVisual ? 'block' : 'none';
+    excelPanel.style.display = isVisual ? 'none' : 'block';
+    visualTab.classList.toggle('active', isVisual);
+    visualTab.setAttribute('aria-selected', String(isVisual));
+    excelTab.classList.toggle('active', !isVisual);
+    excelTab.setAttribute('aria-selected', String(!isVisual));
+
+    if (isVisual) renderVisualEditor();
+    else initExcel();
+}
+
+function initExcel() {
+    const container = document.getElementById('excelContainer');
+    if (!container) return;
+    destroyExcelEditor();
     container.style.display = 'block';
     container.innerHTML = '';
 
-    const p = plans[currentPlan];
-    if (!p) return;
-    tempExcelData = JSON.parse(JSON.stringify(p.data || []));
+    if (!plans[currentPlan]) return;
+    if (!tempExcelData) tempExcelData = [];
 
     hotInstance = new Handsontable(container, {
         data: tempExcelData,
         rowHeaders: true,
         colHeaders: true,
-        height: '100%',
+        height: window.matchMedia('(max-width: 700px)').matches ? '58vh' : '60vh',
         licenseKey: 'non-commercial-and-evaluation',
         contextMenu: true,
         minSpareRows: 1,
@@ -476,36 +538,42 @@ function initExcel() {
         manualColumnResize: true,
         manualRowResize: true,
         stretchH: 'all',
-        readOnly: !isAdmin && isClassicPlan(currentPlan)
+        readOnly: !isAdmin && isClassicPlan(currentPlan),
+        editor: 'text',
+        outsideClickDeselects: false,
+        enterBeginsEditing: true,
+        enterMoves: { row: 1, col: 0 },
+        tabMoves: { row: 0, col: 1 },
+        autoWrapRow: false,
+        autoWrapCol: false,
+        imeFastEdit: true,
+        viewportRowRenderingOffset: 'auto',
+        viewportColumnRenderingOffset: 'auto',
+        observeDOMVisibility: true
     });
 }
 
 function addExcelRow() { if (hotInstance) hotInstance.alter('insert_row_below'); }
 function addExcelCol() { if (hotInstance) hotInstance.alter('insert_col_right'); }
 
-function saveExcelChanges() {
-    if (hotInstance && plans[currentPlan] && (isAdmin || !isClassicPlan(currentPlan))) {
-        plans[currentPlan].data = hotInstance.getData();
-        saveAll();
-    }
-    if (hotInstance) {
-        hotInstance.destroy();
-        hotInstance = null;
-    }
+function saveEditChanges() {
+    if (!plans[currentPlan] || (!isAdmin && isClassicPlan(currentPlan))) return;
+    if (hotInstance) tempExcelData = hotInstance.getData();
+    plans[currentPlan].data = tempExcelData || [];
+    const notes = document.getElementById('visualPlanNotes');
+    if (notes) plans[currentPlan].notes = notes.value;
+    saveAll();
     setMode('basic');
 }
 
-function cancelExcelChanges() {
-    tempExcelData = null;
-    if (hotInstance) {
-        hotInstance.destroy();
-        hotInstance = null;
-    }
+function cancelEditChanges() {
     setMode('basic');
 }
 
-function parseSheetToStructure() {
-    const raw = plans[currentPlan]?.data || [];
+function saveExcelChanges() { saveEditChanges(); }
+function cancelExcelChanges() { cancelEditChanges(); }
+
+function parseSheetToStructure(raw = plans[currentPlan]?.data || []) {
     let days = [];
     let currentDay = null;
     let customHeaders = [];
@@ -524,6 +592,10 @@ function parseSheetToStructure() {
                     customHeaders.push({ name: headerName, colIdx: i });
                 }
             }
+            if (currentDay && currentDay.headerRowIndex === null) {
+                currentDay.headerRowIndex = rowIndex;
+                currentDay.headers = customHeaders.slice();
+            }
             return;
         }
 
@@ -536,7 +608,14 @@ function parseSheetToStructure() {
             const isRest = isRestWord(col0) || isRestWord(col1);
             let fullDayTitle = col1 ? `${col0} - ${col1}` : col0;
             if (fullDayTitle.startsWith('# ')) fullDayTitle = fullDayTitle.substring(2);
-            currentDay = { name: fullDayTitle, isRest, exercises: [] };
+            currentDay = {
+                name: fullDayTitle,
+                isRest,
+                rowIndex,
+                headerRowIndex: null,
+                headers: customHeaders.slice(),
+                exercises: []
+            };
             days.push(currentDay);
         } else if (currentDay && (col0 !== '' || col1 !== '')) {
             let rowData = {};
@@ -563,7 +642,285 @@ function parseSheetToStructure() {
         ];
     }
 
-    return { days, headers: customHeaders };
+    const allHeaders = [];
+    raw.forEach(row => {
+        if (!isHeaderRow(row)) return;
+        for (let i = 2; i < row.length; i++) {
+            const name = String(row[i] || '').trim();
+            if (name && !allHeaders.some(header => header.name === name)) {
+                allHeaders.push({ name, colIdx: i });
+            }
+        }
+    });
+
+    return { days, headers: allHeaders.length ? allHeaders : customHeaders };
+}
+
+function renderVisualEditor() {
+    const container = document.getElementById('visualEditorContainer');
+    if (!container) return;
+
+    ensureVisualPlanStructure();
+    const { days, headers } = parseSheetToStructure(tempExcelData);
+    const plan = plans[currentPlan];
+
+    container.innerHTML = `
+        <div class="visual-toolbar">
+            <details class="visual-settings">
+                <summary>Notatki i parametry <span>${headers.map(header => escapeHtml(header.name)).join(' · ')}</span></summary>
+                <div class="visual-settings-content">
+                    <label class="visual-notes-label" for="visualPlanNotes">Notatki do planu</label>
+                    <textarea id="visualPlanNotes" placeholder="Notatki do planu...">${escapeHtml(plan?.notes || '')}</textarea>
+                    <div class="visual-parameters">
+                        <strong>Kolumny w tabeli</strong>
+                        <div class="visual-parameter-chips">
+                            ${headers.map(header => `
+                                <span class="visual-parameter-chip">
+                                    <input aria-label="Nazwa parametru ${escapeHtml(header.name)}" value="${escapeHtml(header.name)}" onchange="renameVisualParameter(${header.colIdx}, this.value)">
+                                    <button type="button" aria-label="Usuń parametr ${escapeHtml(header.name)}" onclick="removeVisualParameter(${header.colIdx})">×</button>
+                                </span>
+                            `).join('')}
+                        </div>
+                        <form class="visual-add-parameter" onsubmit="addVisualParameterFromForm(event)">
+                            <input name="parameterName" placeholder="Nowy parametr (np. RIR)" aria-label="Nazwa nowego parametru">
+                            <button class="btn btn-sm" type="submit">+ Dodaj parametr</button>
+                        </form>
+                    </div>
+                </div>
+            </details>
+        </div>
+        ${days.map((day, dayIndex) => `
+            <section class="visual-day-card ${day.isRest ? 'rest-day' : ''}">
+                <div class="visual-day-heading">
+                    <div class="visual-day-title">
+                        <span class="visual-day-number">${dayIndex + 1}.</span>
+                        <input aria-label="Nazwa dnia treningowego" value="${escapeHtml(day.name)}" onchange="updateVisualCell(${day.rowIndex}, 0, this.value)">
+                    </div>
+                    <div class="visual-day-actions">
+                        <button class="btn btn-sm" onclick="toggleVisualRest(${dayIndex})">${day.isRest ? 'Przywróć trening' : 'Dzień wolny'}</button>
+                        <button class="btn btn-sm btn-danger" aria-label="Usuń dzień" onclick="removeVisualDay(${dayIndex})">Usuń</button>
+                    </div>
+                </div>
+                ${day.isRest ? '<div class="visual-rest-hint">Dzień regeneracji</div>' : `
+                    <div class="table-wrapper visual-plan-table">
+                        <div class="table-grid">
+                            <div class="row-grid row-header">
+                                <div class="col-cell nr-col">Nr</div>
+                                <div class="col-cell name-col">Ćwiczenie</div>
+                                ${headers.map(header => `<div class="col-cell">${escapeHtml(header.name)}</div>`).join('')}
+                                <div class="col-cell visual-action-col"></div>
+                            </div>
+                            ${day.exercises.map(exercise => `
+                                <div class="row-grid visual-exercise-row">
+                                    <div class="col-cell nr-col">
+                                        <input class="cell-input" value="${escapeHtml(exercise.nr)}" aria-label="Numer ćwiczenia" onchange="updateVisualExerciseNumber(${exercise.rowIndex}, ${dayIndex}, this.value)">
+                                    </div>
+                                    <div class="col-cell name-col">
+                                        <input class="cell-input name-input" value="${escapeHtml(exercise.name)}" placeholder="Nazwa ćwiczenia" aria-label="Nazwa ćwiczenia" onchange="updateVisualCell(${exercise.rowIndex}, 1, this.value)">
+                                    </div>
+                                    ${headers.map(header => `
+                                        <div class="col-cell">
+                                            <input class="cell-input" value="${escapeHtml(exercise.rawRow[header.colIdx] ?? '')}" aria-label="${escapeHtml(header.name)} dla ${escapeHtml(exercise.name || 'ćwiczenia')}" onchange="updateVisualCell(${exercise.rowIndex}, ${header.colIdx}, this.value)">
+                                        </div>
+                                    `).join('')}
+                                    <div class="col-cell visual-action-col">
+                                        <button class="btn visual-delete-row" aria-label="Usuń ćwiczenie ${escapeHtml(exercise.name)}" onclick="removeVisualExercise(${exercise.rowIndex})">×</button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <button class="btn visual-add-exercise" onclick="addVisualExercise(${dayIndex})">+ Dodaj ćwiczenie</button>
+                `}
+            </section>
+        `).join('')}
+        <button class="btn btn-primary visual-add-day" onclick="addVisualDay()">+ Dodaj dzień treningowy</button>
+    `;
+}
+
+function updateVisualCell(rowIndex, colIndex, value) {
+    const row = tempExcelData?.[rowIndex];
+    if (!row) return;
+    while (row.length <= colIndex) row.push('');
+    row[colIndex] = value;
+}
+
+function updateVisualExerciseNumber(rowIndex, dayIndex, value) {
+    const previousNumber = String(tempExcelData?.[rowIndex]?.[0] || '').trim();
+    updateVisualCell(rowIndex, 0, value);
+    const nextNumber = String(value || '').trim();
+    if (/^\d+$/.test(previousNumber) && /^\d+$/.test(nextNumber)) {
+        const { days } = parseSheetToStructure(tempExcelData);
+        days[dayIndex]?.exercises.forEach(exercise => {
+            const exerciseNumber = String(exercise.nr || '');
+            if (exercise.rowIndex !== rowIndex && exerciseNumber.startsWith(`${previousNumber}.`)) {
+                tempExcelData[exercise.rowIndex][0] = `${nextNumber}${exerciseNumber.slice(previousNumber.length)}`;
+            }
+        });
+    }
+    sortVisualDayRows(dayIndex);
+    renderVisualEditor();
+}
+
+function sortVisualDayRows(dayIndex) {
+    const { days } = parseSheetToStructure(tempExcelData);
+    const day = days[dayIndex];
+    if (!day || day.exercises.length < 2) return;
+
+    const rowIndexes = day.exercises.map(exercise => exercise.rowIndex);
+    const sortedRows = rowIndexes
+        .map((rowIndex, originalIndex) => ({ row: tempExcelData[rowIndex], originalIndex }))
+        .sort((left, right) => {
+            const leftNumber = String(left.row[0] || '').trim();
+            const rightNumber = String(right.row[0] || '').trim();
+            if (!leftNumber && rightNumber) return 1;
+            if (leftNumber && !rightNumber) return -1;
+            if (/^\d+(?:\.\d+)*$/.test(leftNumber) && /^\d+(?:\.\d+)*$/.test(rightNumber)) {
+                const leftParts = leftNumber.split('.').map(Number);
+                const rightParts = rightNumber.split('.').map(Number);
+                for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index++) {
+                    const difference = (leftParts[index] ?? -1) - (rightParts[index] ?? -1);
+                    if (difference !== 0) return difference;
+                }
+                return left.originalIndex - right.originalIndex;
+            }
+            return leftNumber.localeCompare(rightNumber, undefined, { numeric: true, sensitivity: 'base' }) ||
+                left.originalIndex - right.originalIndex;
+        });
+
+    rowIndexes.forEach((rowIndex, index) => {
+        tempExcelData[rowIndex] = sortedRows[index].row;
+    });
+}
+
+function getVisualHeaderRows() {
+    return tempExcelData.map((row, index) => isHeaderRow(row) ? index : -1).filter(index => index >= 0);
+}
+
+function addVisualParameterFromForm(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const input = form.elements.parameterName;
+    const normalizedName = input.value.trim();
+    if (!normalizedName) {
+        input.focus();
+        return;
+    }
+    if (getVisualHeaderRows().length === 0) {
+        ensureVisualPlanStructure();
+    }
+
+    const currentHeaders = parseSheetToStructure(tempExcelData).headers;
+    if (currentHeaders.some(header => header.name.toLowerCase() === normalizedName.toLowerCase())) {
+        alert(`Parametr "${normalizedName}" już istnieje.`);
+        return;
+    }
+
+    const columnIndex = Math.max(2, ...tempExcelData.map(row =>
+        row.reduce((lastUsedColumn, cell, index) =>
+            String(cell ?? '').trim() ? index + 1 : lastUsedColumn, 2)
+    ));
+    tempExcelData.forEach(row => {
+        while (row.length <= columnIndex) row.push('');
+    });
+    getVisualHeaderRows().forEach(index => { tempExcelData[index][columnIndex] = normalizedName; });
+    renderVisualEditor();
+    const settings = document.querySelector('.visual-settings');
+    if (settings) settings.open = true;
+}
+
+function renameVisualParameter(columnIndex, value) {
+    const name = value.trim();
+    if (!name) {
+        alert('Nazwa parametru nie może być pusta.');
+        renderVisualEditor();
+        return;
+    }
+    const duplicate = parseSheetToStructure(tempExcelData).headers.some(header =>
+        header.colIdx !== columnIndex && header.name.toLowerCase() === name.toLowerCase()
+    );
+    if (duplicate) {
+        alert(`Parametr "${name}" już istnieje.`);
+        renderVisualEditor();
+        return;
+    }
+    getVisualHeaderRows().forEach(index => { tempExcelData[index][columnIndex] = name; });
+    renderVisualEditor();
+    const settings = document.querySelector('.visual-settings');
+    if (settings) settings.open = true;
+}
+
+function removeVisualParameter(columnIndex) {
+    const header = parseSheetToStructure(tempExcelData).headers.find(item => item.colIdx === columnIndex);
+    if (!header || !confirm(`Usunąć parametr "${header.name}" ze wszystkich dni planu?`)) return;
+    tempExcelData.forEach(row => row.splice(columnIndex, 1));
+    renderVisualEditor();
+    const settings = document.querySelector('.visual-settings');
+    if (settings) settings.open = true;
+}
+
+function addVisualDay() {
+    const { days, headers } = parseSheetToStructure(tempExcelData);
+    const dayNumber = days.length + 1;
+    const headerLength = Math.max(2, ...headers.map(header => header.colIdx + 1));
+    const dayRow = new Array(headerLength).fill('');
+    const headerRow = new Array(headerLength).fill('');
+    dayRow[0] = `Dzień ${dayNumber} - Trening`;
+    headerRow[0] = 'Nr';
+    headerRow[1] = 'Ćwiczenie';
+    headers.forEach(header => { headerRow[header.colIdx] = header.name; });
+    const newDayRows = [dayRow, headerRow];
+    tempExcelData.push(...newDayRows);
+    renderVisualEditor();
+}
+
+function addVisualExercise(dayIndex) {
+    const { days, headers } = parseSheetToStructure(tempExcelData);
+    const day = days[dayIndex];
+    if (!day) return;
+    const nextDay = days[dayIndex + 1];
+    const insertionIndex = nextDay ? nextDay.rowIndex : tempExcelData.length;
+    const lastNumber = day.exercises.reduce((max, exercise) => {
+        const parsed = Number.parseInt(String(exercise.nr).split('.')[0], 10);
+        return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+    }, 0);
+    const row = new Array(Math.max(2, ...headers.map(header => header.colIdx + 1))).fill('');
+    row[0] = String(lastNumber + 1);
+    tempExcelData.splice(insertionIndex, 0, row);
+    renderVisualEditor();
+}
+
+function removeVisualExercise(rowIndex) {
+    if (!confirm('Usunąć to ćwiczenie z planu?')) return;
+    tempExcelData.splice(rowIndex, 1);
+    renderVisualEditor();
+}
+
+function removeVisualDay(dayIndex) {
+    const { days } = parseSheetToStructure(tempExcelData);
+    const day = days[dayIndex];
+    if (!day || !confirm(`Usunąć dzień "${day.name}" wraz z ćwiczeniami?`)) return;
+    const nextDay = days[dayIndex + 1];
+    tempExcelData.splice(day.rowIndex, (nextDay ? nextDay.rowIndex : tempExcelData.length) - day.rowIndex);
+    if (parseSheetToStructure(tempExcelData).days.length === 0) {
+        tempExcelData.push(["Dzień 1 - Trening", "", "", "", ""], ["Nr", "Ćwiczenie", "S", "P", "KG"]);
+    }
+    renderVisualEditor();
+}
+
+function toggleVisualRest(dayIndex) {
+    const day = parseSheetToStructure(tempExcelData).days[dayIndex];
+    if (!day) return;
+    let title = day.name;
+    if (day.isRest) {
+        title = title.replace(/\s*[-–]?\s*(wolne|rest|pauza|regeneracja)\s*/ig, '').trim();
+        if (!title) title = `Dzień ${dayIndex + 1}`;
+    } else if (!/wolne|rest|pauza|regeneracja/i.test(title)) {
+        title += ' - Wolne';
+    }
+    tempExcelData[day.rowIndex][0] = title;
+    if (tempExcelData[day.rowIndex].length > 1) tempExcelData[day.rowIndex][1] = '';
+    renderVisualEditor();
 }
 
 function ensurePlanEditable() {

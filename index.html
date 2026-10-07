@@ -19,7 +19,7 @@
     <meta name="mobile-web-app-capable" content="yes">
 
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>KZAR Coaching | Plany treningowe</title>
 
     <!-- ZEWNĘTRZNE SKRYPTY / BIBLIOTEKI -->
@@ -30,7 +30,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <!-- STYL ZEWNĘTRZNY -->
-    <link rel="stylesheet" href="style.css?v=20261005-3">
+    <link rel="stylesheet" href="style.css?v=20261007-2">
 </head>
 <body>
 
@@ -82,15 +82,32 @@
         <!-- WIDOK PLANU -->
         <div id="gymView"></div>
 
-        <!-- EDYTOR EXCEL (FULL TABELA) -->
+        <!-- EDYTOR PLANU -->
         <div id="editArea" style="display:none;">
-            <div class="excel-toolbar">
-                <button class="btn btn-sm" onclick="addExcelRow()">+ Wiersz</button>
-                <button class="btn btn-sm" onclick="addExcelCol()">+ Kolumna</button>
-                <button class="btn btn-sm btn-primary" onclick="saveExcelChanges()">Zapisz i Zamknij</button>
-                <button class="btn btn-sm" onclick="cancelExcelChanges()">Anuluj</button>
+            <div class="edit-intro">
+                <h2>Edytuj plan treningowy</h2>
+                <p>Wybierz prostą edycję planu lub arkusz dla pełnej kontroli nad tabelą.</p>
             </div>
-            <div id="excelContainer"></div>
+            <div class="edit-mode-tabs" role="tablist" aria-label="Tryb edycji">
+                <button id="visualEditTab" class="btn edit-mode-tab active" role="tab" aria-selected="true" onclick="changeEditView('visual')">Prosta edycja</button>
+                <button id="excelEditTab" class="btn edit-mode-tab" role="tab" aria-selected="false" onclick="changeEditView('excel')">Arkusz Excel</button>
+            </div>
+
+            <div id="visualEditorContainer"></div>
+
+            <div id="excelEditorPanel" style="display:none;">
+                <div class="excel-toolbar">
+                    <button class="btn btn-sm" onclick="addExcelRow()">+ Wiersz</button>
+                    <button class="btn btn-sm" onclick="addExcelCol()">+ Kolumna</button>
+                </div>
+                <p class="excel-mobile-hint">Dotknij komórki dwa razy, aby edytować. Zaznaczenie i przewijanie działają także gestami.</p>
+                <div id="excelContainer"></div>
+            </div>
+
+            <div class="editor-footer">
+                <button class="btn btn-primary" onclick="saveEditChanges()">Zapisz zmiany</button>
+                <button class="btn" onclick="cancelEditChanges()">Anuluj</button>
+            </div>
         </div>
     </main>
 
@@ -232,6 +249,6 @@
         </div>
     </div>
 
-    <script src="script.js?v=20261005-3"></script>
+    <script src="script.js?v=20261007-2"></script>
 </body>
 </html>

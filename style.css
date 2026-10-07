@@ -506,7 +506,270 @@ input[type="checkbox"] {
     align-items: center; 
 }
 
-/* EDYTOR EXCEL & BLOKADA NAWIGACJI */
+/* EDYTOR PLANU */
+.edit-intro { margin: 4px 0 14px; }
+.edit-intro h2 { margin: 0 0 5px; color: var(--gold); font-size: 20px; }
+.edit-intro p { margin: 0; color: var(--text-dim); font-size: 12px; line-height: 1.45; }
+
+.edit-mode-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.edit-mode-tab { min-height: 46px; font-size: 13px; }
+.edit-mode-tab.active {
+    border-color: var(--gold);
+    color: var(--gold);
+    background: rgba(212, 175, 55, 0.1);
+}
+
+.visual-toolbar {
+    display: block;
+    margin-bottom: 12px;
+}
+
+.visual-settings { min-width: 0; }
+.visual-settings summary {
+    display: flex;
+    min-height: 48px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 8px 12px 8px 38px;
+    border: 1px solid var(--border-gold);
+    border-radius: 10px;
+    background: linear-gradient(110deg, rgba(212, 175, 55, 0.16), rgba(212, 175, 55, 0.05));
+    cursor: pointer;
+    color: var(--gold);
+    font-size: 13px;
+    font-weight: 800;
+    list-style: none;
+    position: relative;
+}
+
+.visual-settings summary::-webkit-details-marker { display: none; }
+.visual-settings summary::before {
+    content: "⚙";
+    position: absolute;
+    left: 13px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 17px;
+}
+
+.visual-settings summary::after {
+    content: "⌄";
+    position: absolute;
+    right: 13px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 17px;
+}
+
+.visual-settings[open] summary {
+    border-color: var(--gold);
+    border-radius: 10px 10px 0 0;
+}
+
+.visual-settings summary span {
+    display: block;
+    max-width: 54vw;
+    overflow: hidden;
+    color: var(--text-dim);
+    font-size: 10px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.visual-settings-content {
+    position: relative;
+    z-index: 20;
+    padding: 14px;
+    border: 1px solid var(--border-gold);
+    border-top: 0;
+    border-radius: 0 0 10px 10px;
+    background: #141414;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
+}
+
+.visual-settings-content label,
+.visual-parameters > strong {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-dim);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.visual-settings-content textarea,
+.visual-parameter-chip input,
+.visual-add-parameter input {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    outline: none;
+    background: #090909;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+}
+
+.visual-settings-content textarea {
+    width: 100%;
+    min-height: 64px;
+    padding: 8px;
+    resize: vertical;
+}
+
+.visual-settings-content textarea:focus,
+.visual-parameter-chip input:focus,
+.visual-add-parameter input:focus { border-color: var(--gold); }
+.visual-parameters { margin-top: 12px; }
+
+.visual-parameter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.visual-parameter-chip {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #0c0c0c;
+}
+
+.visual-parameter-chip input { width: 58px; padding: 5px; }
+.visual-parameter-chip button {
+    width: 26px;
+    height: 28px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #ff8c8c;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.visual-add-parameter { display: flex; gap: 6px; }
+.visual-add-parameter input { flex: 1; padding: 8px; }
+.visual-add-parameter .btn { flex: 0 0 auto; }
+.btn-danger { color: #ff8c8c; border-color: rgba(239, 68, 68, 0.35); }
+
+.visual-day-card {
+    margin-bottom: 14px;
+    overflow: hidden;
+    border: 1px solid #282828;
+    border-radius: 8px;
+    background: #111;
+}
+
+.visual-day-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-gold);
+    background: linear-gradient(90deg, #221e10 0%, #161616 100%);
+}
+
+.visual-day-title { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.visual-day-number { color: var(--gold); font-size: 12px; font-weight: 900; }
+.visual-day-title input {
+    min-width: 0;
+    width: 100%;
+    padding: 7px 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    outline: none;
+    background: transparent;
+    color: var(--gold);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.visual-day-title input:focus { border-color: var(--gold); background: #090909; }
+.visual-day-actions { display: flex; gap: 5px; }
+.visual-day-actions .btn { min-height: 34px; padding: 6px 8px; }
+.visual-plan-table { overflow-x: auto; }
+.visual-plan-table .table-grid { min-width: max-content; }
+.visual-exercise-row { min-height: 44px; padding-top: 4px; padding-bottom: 4px; }
+.visual-exercise-row .cell-input { min-height: 34px; padding: 4px 5px; }
+.visual-exercise-row .name-input { text-align: left; }
+.visual-exercise-row .col-cell { overflow: visible; }
+.visual-exercise-row .visual-action-col,
+.visual-plan-table .visual-action-col { min-width: 38px; max-width: 38px; flex: 0 0 38px; }
+
+.visual-delete-row {
+    display: inline-flex;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    border-color: transparent;
+    color: var(--text-dim);
+    font-size: 20px;
+    line-height: 1;
+}
+
+.visual-delete-row:hover { color: var(--danger); }
+
+.visual-add-exercise {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    background: #0d0d0d;
+    color: var(--gold);
+    text-align: left;
+}
+
+.visual-add-day {
+    display: block;
+    width: 100%;
+    min-height: 48px;
+    margin: 4px 0 16px;
+    font-size: 13px;
+}
+
+.visual-rest-hint {
+    padding: 12px;
+    color: var(--text-dim);
+    font-size: 12px;
+}
+.visual-day-card.rest-day { opacity: 0.75; border-style: dashed; }
+.excel-mobile-hint { margin: 0 0 8px; color: var(--text-dim); font-size: 11px; }
+
+.editor-footer {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+    margin: 14px -4px 0;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(15, 15, 15, 0.97);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.editor-footer .btn { flex: 1; min-height: 46px; font-size: 13px; }
+.editing-active .floating-logo-btn { display: none; }
+#editArea { padding-bottom: calc(30px + env(safe-area-inset-bottom)); }
+
+/* ARKUSZ EXCEL I BLOKADA NAWIGACJI */
 .excel-toolbar {
     display: flex;
     gap: 8px;
@@ -515,11 +778,22 @@ input[type="checkbox"] {
 }
 #excelContainer { 
     width: 100%; 
-    height: 65vh;
+    height: min(60vh, 600px);
+    min-height: 300px;
     background: #111; 
     border-radius: 12px; 
-    overflow: hidden; 
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
     border: 1px solid var(--border-gold);
+}
+
+#excelContainer .handsontable,
+#excelContainer .handsontable .wtHolder {
+    touch-action: pan-x pan-y;
+}
+
+#excelContainer .handsontableInput {
+    font-size: 16px !important;
 }
 
 .bottom-nav.nav-locked .nav-btn:not(#btnEditMode) {
@@ -790,6 +1064,11 @@ body.classic-preview-active .floating-logo-btn {
 }
 
 @media (max-width: 420px) {
+    .visual-day-heading { align-items: flex-start; }
+    .visual-day-title input { font-size: 11px; }
+    .visual-day-actions .btn { padding: 6px; font-size: 9px; }
+    #excelContainer { height: 58vh; min-height: 280px; }
+
     .classic-overlay-wrapper {
         width: calc(100% - 20px);
     }
