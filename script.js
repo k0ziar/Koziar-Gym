@@ -36,7 +36,7 @@ var resetCheckPlans = JSON.parse(localStorage.getItem('koziar_reset_check_plans'
 
 const CLASSIC_PLAN_NAMES = [
     '3-dniowy FBW - by Koziar',
-    '4-dniowy Upper/Lower - by koziar',
+    '4-dniowy Upper/Lower - by Koziar',
     '5-dniowy U/L/PPL - by Koziar'
 ];
 const CLASSIC_PLAN_NAME_KEYS = new Set(CLASSIC_PLAN_NAMES.map(name => name.toLowerCase()));
@@ -53,6 +53,13 @@ function escapeHtml(value) {
         '"': '&quot;',
         "'": '&#39;'
     })[character]);
+}
+
+function fitBasicExerciseNames() {
+    document.querySelectorAll('.basic-table-grid .name-input').forEach(input => {
+        input.style.height = 'auto';
+        input.style.height = `${input.scrollHeight + 2}px`;
+    });
 }
 
 function inlineStringArgument(value) {
@@ -1132,7 +1139,7 @@ function renderGymView() {
                                     <input type="text" class="cell-input" value="${escapeHtml(ex.nr)}" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex}, 0, this.value)">
                                 </div>
                                 <div class="col-cell name-col">
-                                    <textarea class="cell-input name-input" rows="${Math.max(1, Math.ceil(String(ex.name || '').length / (window.innerWidth <= 360 ? 14 : 18)))}" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex}, 1, this.value)">${escapeHtml(ex.name)}</textarea>
+                                    <textarea class="cell-input name-input" rows="1" ${isReadOnlyAttr} onchange="updateCellDirectly(${ex.rowIndex}, 1, this.value)">${escapeHtml(ex.name)}</textarea>
                                 </div>
                                 ${activeHeaders.map(h => {
                                     const cellData = ex.data[h.name] || { val: '', colIdx: h.colIdx };
@@ -1188,8 +1195,11 @@ function renderGymView() {
     `;
     }).join('');
 
+    if (currentMode === 'basic') fitBasicExerciseNames();
     if (window.lucide) lucide.createIcons();
 }
+
+window.addEventListener('resize', fitBasicExerciseNames);
 
 function toggleExpand(key) { expandedExercises[key] = !expandedExercises[key]; renderGymView(); }
 
