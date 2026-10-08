@@ -101,21 +101,41 @@ async function syncPlanToCloud(planName) {
 async function loadPlansFromCloud() {
     if (!window.sbClient) return;
     try {
-        let query = window.sbClient.from('user_plans').select('*');
-
-        // Jeśli to nie admin, pobieramy plany użytkownika LUB ogólnodostępne Klasyki
+        let queries = [];
         if (!isAdmin) {
-            const classicPlanFilter = CLASSIC_PLAN_NAMES.map(name => `"${name}"`).join(',');
-            let filterString = `user_device_id.eq.${deviceId},plan_name.in.(${classicPlanFilter})`;
+            let userPlansQuery = window.sbClient.from('user_plans').select('*');
             if (unlockedKeys.length > 0) {
-                filterString += `,access_key.in.("${unlockedKeys.join('","')}")`;
+                userPlansQuery = userPlansQuery.or(
+                    `user_device_id.eq.${deviceId},access_key.in.("${unlockedKeys.join('","')}")`
+                );
+            } else {
+                userPlansQuery = userPlansQuery.eq('user_device_id', deviceId);
             }
-            query = query.or(filterString);
+            queries = [
+                userPlansQuery,
+                ...CLASSIC_PLAN_NAMES.map(planName =>
+                    window.sbClient.from('user_plans').select('*').eq('plan_name', planName)
+                )
+            ];
+        } else {
+            queries = [window.sbClient.from('user_plans').select('*')];
         }
 
-        const { data, error } = await query;
+        const results = await Promise.all(queries);
+        const failedResult = results.find(result => result.error);
+        if (failedResult) {
+            console.warn("Nie udało się pobrać planów z chmury:", failedResult.error.message);
+            return;
+        }
+        const rowsById = new Map();
+        results.forEach(result => {
+            (result.data || []).forEach(row => {
+                rowsById.set(`${row.user_device_id}:${row.plan_name}`, row);
+            });
+        });
+        const data = [...rowsById.values()];
 
-        if (!error && data) {
+        if (data) {
             let loadedPlans = {};
 
             data.forEach(row => {
@@ -284,12 +304,23 @@ function unlockClassicPlanCopy() {
     const sourcePlan = plans[currentPlan];
     if (!sourcePlan || !isClassicPlan(currentPlan)) return;
 
-    let copyName = currentPlan + " (Mój Plan)";
-    let counter = 1;
+    const suggestedName = `${currentPlan} (Mój Plan)`;
+    const enteredName = prompt("Podaj własną nazwę dla swojej kopii planu:", suggestedName);
+    if (enteredName === null) return;
 
-    while (plans[copyName] || hiddenPlans.includes(copyName)) {
-        counter++;
-        copyName = `${currentPlan} (Mój Plan ${counter})`;
+    const copyName = enteredName.trim();
+    if (!copyName) {
+        alert("Nazwa kopii nie może być pusta.");
+        return;
+    }
+
+    const normalizedCopyName = copyName.toLowerCase();
+    if (
+        Object.keys(plans).some(name => name.toLowerCase() === normalizedCopyName) ||
+        hiddenPlans.some(name => name.toLowerCase() === normalizedCopyName)
+    ) {
+        alert(`Plan "${copyName}" już istnieje. Wybierz inną nazwę, aby nie tworzyć duplikatu.`);
+        return;
     }
 
     plans[copyName] = {
