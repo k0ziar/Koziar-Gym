@@ -34,10 +34,15 @@ var currentPlan = localStorage.getItem('koziar_current_plan') || '';
 var checks = JSON.parse(localStorage.getItem('koziar_checks')) || {};
 var resetCheckPlans = JSON.parse(localStorage.getItem('koziar_reset_check_plans')) || [];
 
-const CLASSIC_PLAN_NAMES = new Set(['basic1', 'basic2', 'basic3']);
+const CLASSIC_PLAN_NAMES = [
+    '3-dniowy FBW - by Koziar',
+    '4-dniowy Upper/Lower - by Koziar',
+    '5-dniowy U/L/PPL - by Koziar'
+];
+const CLASSIC_PLAN_NAME_KEYS = new Set(CLASSIC_PLAN_NAMES.map(name => name.toLowerCase()));
 
 function isClassicPlan(planName) {
-    return typeof planName === 'string' && CLASSIC_PLAN_NAMES.has(planName.trim().toLowerCase());
+    return typeof planName === 'string' && CLASSIC_PLAN_NAME_KEYS.has(planName.trim().toLowerCase());
 }
 
 function escapeHtml(value) {
@@ -100,7 +105,8 @@ async function loadPlansFromCloud() {
 
         // Jeśli to nie admin, pobieramy plany użytkownika LUB ogólnodostępne Klasyki
         if (!isAdmin) {
-            let filterString = `user_device_id.eq.${deviceId},plan_name.in.(basic1,basic2,basic3)`;
+            const classicPlanFilter = CLASSIC_PLAN_NAMES.map(name => `"${name}"`).join(',');
+            let filterString = `user_device_id.eq.${deviceId},plan_name.in.(${classicPlanFilter})`;
             if (unlockedKeys.length > 0) {
                 filterString += `,access_key.in.("${unlockedKeys.join('","')}")`;
             }
@@ -385,8 +391,7 @@ function initPlanSelect() {
         if (!hiddenPlans.includes(name) || isAdmin) {
             const keyTag = plans[name].accessKey ? ` 🔑[${plans[name].accessKey}]` : '';
             const isClassic = isClassicPlan(name);
-            const displayName = isClassic ? `Basic ${name.slice(-1)}` : name;
-            const opt = new Option(displayName + keyTag, name);
+            const opt = new Option(name + keyTag, name);
             if (isClassic) {
                 gOfficial.appendChild(opt);
             } else {
