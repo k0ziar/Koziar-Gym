@@ -36,7 +36,7 @@ var resetCheckPlans = JSON.parse(localStorage.getItem('koziar_reset_check_plans'
 
 const CLASSIC_PLAN_NAMES = [
     '3-dniowy FBW - by Koziar',
-    '4-dniowy Upper/Lower - by Koziar',
+    '4-dniowy Upper/Lower - by koziar',
     '5-dniowy U/L/PPL - by Koziar'
 ];
 const CLASSIC_PLAN_NAME_KEYS = new Set(CLASSIC_PLAN_NAMES.map(name => name.toLowerCase()));
