@@ -173,7 +173,7 @@ async function loadPlansFromCloud() {
                     Object.keys(checks).forEach(key => {
                         if (key.startsWith(planCheckPrefix)) delete checks[key];
                     });
-                    if (row.checks && !resetCheckPlans.includes(row.plan_name)) {
+                    if (row.checks) {
                         const cloudChecks = Object.fromEntries(
                             Object.entries(row.checks).filter(([key]) => key.startsWith(planCheckPrefix))
                         );
