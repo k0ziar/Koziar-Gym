@@ -33,6 +33,7 @@ var plans = JSON.parse(localStorage.getItem('koziar_plans')) || {};
 var currentPlan = localStorage.getItem('koziar_current_plan') || '';
 var checks = JSON.parse(localStorage.getItem('koziar_checks')) || {};
 var resetCheckPlans = JSON.parse(localStorage.getItem('koziar_reset_check_plans')) || [];
+var cloudSyncQueues = new Map();
 
 const CLASSIC_PLAN_NAMES = [
     '3-dniowy FBW - by Koziar',
@@ -75,24 +76,32 @@ function saveAll() {
     localStorage.setItem('koziar_reset_check_plans', JSON.stringify(resetCheckPlans));
     localStorage.setItem('koziar_hidden_plans', JSON.stringify(hiddenPlans));
 
-    syncPlanToCloud(currentPlan);
+    return syncPlanToCloud(currentPlan);
 }
 
-async function syncPlanToCloud(planName) {
-    if (!window.sbClient || !planName) return;
+function syncPlanToCloud(planName) {
+    if (!window.sbClient || !planName) return Promise.resolve();
     const p = plans[planName];
-    if (!p || (isClassicPlan(planName) && !isAdmin)) return;
+    if (!p || (isClassicPlan(planName) && !isAdmin)) return Promise.resolve();
 
-    try {
-        const targetDeviceId = p.ownerDeviceId || deviceId;
+    const targetDeviceId = p.ownerDeviceId || deviceId;
+    const queueKey = `${targetDeviceId}:${planName}`;
+    const previousSync = cloudSyncQueues.get(queueKey) || Promise.resolve();
+    const syncPromise = previousSync.catch(() => {}).then(async () => {
+        const latestPlan = plans[planName];
+        if (!latestPlan || (isClassicPlan(planName) && !isAdmin)) return;
 
+        const planCheckPrefix = `${planName}-`;
+        const planChecks = Object.fromEntries(
+            Object.entries(checks).filter(([key]) => key.startsWith(planCheckPrefix))
+        );
         const payload = {
-            user_device_id: targetDeviceId,
+            user_device_id: latestPlan.ownerDeviceId || deviceId,
             plan_name: planName,
-            notes: p.notes || "",
-            data: p.data,
-            checks: checks,
-            access_key: p.accessKey || null,
+            notes: latestPlan.notes || "",
+            data: latestPlan.data,
+            checks: planChecks,
+            access_key: latestPlan.accessKey || null,
             updated_at: new Date().toISOString()
         };
 
@@ -100,9 +109,15 @@ async function syncPlanToCloud(planName) {
             .from('user_plans')
             .upsert(payload, { onConflict: 'user_device_id, plan_name' });
         if (error) console.warn("Nie udało się zapisać planu w chmurze:", error.message);
-    } catch (err) {
+    }).catch(err => {
         console.warn("Brak połączenia z chmurą:", err);
-    }
+    }).then(() => {
+        if (cloudSyncQueues.get(queueKey) === syncPromise) {
+            cloudSyncQueues.delete(queueKey);
+        }
+    });
+    cloudSyncQueues.set(queueKey, syncPromise);
+    return syncPromise;
 }
 
 async function loadPlansFromCloud() {
@@ -154,11 +169,13 @@ async function loadPlansFromCloud() {
                         accessKey: row.access_key,
                         ownerDeviceId: row.user_device_id
                     };
-                    if (row.checks) {
+                    const planCheckPrefix = `${row.plan_name}-`;
+                    Object.keys(checks).forEach(key => {
+                        if (key.startsWith(planCheckPrefix)) delete checks[key];
+                    });
+                    if (row.checks && !resetCheckPlans.includes(row.plan_name)) {
                         const cloudChecks = Object.fromEntries(
-                            Object.entries(row.checks).filter(([key]) =>
-                                !resetCheckPlans.some(name => key.startsWith(`${name}-`))
-                            )
+                            Object.entries(row.checks).filter(([key]) => key.startsWith(planCheckPrefix))
                         );
                         checks = { ...checks, ...cloudChecks };
                     }
@@ -179,6 +196,7 @@ async function loadPlansFromCloud() {
             if (!isAdmin) {
                 localStorage.setItem('koziar_plans', JSON.stringify(plans));
             }
+            localStorage.setItem('koziar_checks', JSON.stringify(checks));
             
             const availableKeys = Object.keys(plans);
             if (availableKeys.length > 0 && (!currentPlan || !plans[currentPlan])) {
@@ -1014,6 +1032,8 @@ function updateSubSetCellDirectly(parentRowIndex, setIdx, headerName, value) {
 
 function toggleCheck(key, target, value, totalSubSets = 0) {
     if (!isAdmin && isClassicPlan(currentPlan)) return;
+
+    resetCheckPlans = resetCheckPlans.filter(name => name !== currentPlan);
 
     if (!checks[key]) checks[key] = {};
 
