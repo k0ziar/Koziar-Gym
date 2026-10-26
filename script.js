@@ -1179,6 +1179,7 @@ function renderGymView() {
         document.body.classList.remove("classic-preview-active");
         if (gymView) gymView.classList.remove("classic-blurred-view");
     }
+    gymView?.classList.toggle('history-archive-view', isArchiveView);
 
     if (notesContainer) notesContainer.classList.toggle("classic-preview-notes", isLockedClassic);
 
@@ -1249,7 +1250,7 @@ function renderGymView() {
                             <div class="row-grid ${mainChecked ? 'done' : ''}">
                                 ${currentMode === 'pro' ? `
                                 <div class="col-cell expand-col">
-                                    <button class="btn-expand" ${isArchiveView ? 'disabled' : ''} onclick="toggleExpand(${inlineStringArgument(key)})">
+                                    <button class="btn-expand" onclick="toggleExpand(${inlineStringArgument(key)})">
                                         <i data-lucide="${isExpanded ? 'chevron-down' : 'chevron-right'}" style="width:14px"></i>
                                     </button>
                                 </div>` : ''}

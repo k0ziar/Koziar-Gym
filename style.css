@@ -18,7 +18,18 @@
 * { 
     box-sizing: border-box; 
     -webkit-tap-highlight-color: transparent; 
+    scrollbar-width: thin;
+    scrollbar-color: var(--gold) #191919;
 }
+
+*::-webkit-scrollbar { width: 7px; height: 7px; }
+*::-webkit-scrollbar-track { background: #191919; border-radius: 8px; }
+*::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #c9a961, var(--gold));
+    border: 1px solid #292416;
+    border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover { background: #f0d365; }
 
 body {
     margin: 0;
@@ -347,9 +358,12 @@ main {
 .table-wrapper.basic-table-wrapper {
     overflow-x: hidden;
 }
-.table-wrapper::-webkit-scrollbar { height: 5px; }
-.table-wrapper::-webkit-scrollbar-track { background: #191919; }
-.table-wrapper::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 4px; }
+.visual-plan-table,
+.history-tabs,
+#excelContainer {
+    scrollbar-width: thin;
+    scrollbar-color: var(--gold) #191919;
+}
 .table-grid { display: flex; flex-direction: column; width: max-content; min-width: 100%; }
 
 .table-grid.basic-table-grid {
@@ -491,9 +505,45 @@ main {
 input[type="checkbox"] {
     width: 20px; 
     height: 20px; 
-    accent-color: var(--gold);
+    -webkit-appearance: none;
+    appearance: none;
+    display: grid;
+    place-content: center;
+    border: 1px solid #737373;
+    background: #161616;
     cursor: pointer;
     border-radius: 4px;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="checkbox"]::before {
+    content: "";
+    width: 9px;
+    height: 5px;
+    border: solid #111;
+    border-width: 0 0 2px 2px;
+    transform: rotate(-45deg) scale(0);
+    transition: transform 0.12s ease;
+}
+
+input[type="checkbox"]:checked {
+    border-color: var(--gold);
+    background: var(--gold);
+    box-shadow: 0 0 8px var(--gold-glow);
+}
+
+input[type="checkbox"]:checked::before {
+    transform: rotate(-45deg) scale(1);
+}
+
+input[type="checkbox"]:disabled {
+    opacity: 1;
+    cursor: default;
+}
+
+.history-archive-view input[type="checkbox"]:disabled:not(:checked) {
+    border-color: #555;
+    background: #121212;
 }
 
 .btn-expand { 
