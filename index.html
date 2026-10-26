@@ -30,7 +30,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <!-- STYL ZEWNĘTRZNY -->
-    <link rel="stylesheet" href="style.css?v=20261007-2">
+    <link rel="stylesheet" href="style.css?v=20261026-1">
 </head>
 <body>
 
@@ -78,6 +78,8 @@
             <label>NOTATKI DO PLANU</label>
             <textarea id="planNotes" placeholder="Treść notatek..." onchange="saveNotes()"></textarea>
         </div>
+
+        <section id="historyBar" class="history-bar" aria-label="Historia planu"></section>
 
         <!-- WIDOK PLANU -->
         <div id="gymView"></div>
@@ -133,9 +135,9 @@
             <span>NOWY</span>
         </button>
 
-        <button class="nav-btn" onclick="resetWeek()">
-            <i data-lucide="rotate-ccw"></i>
-            <span>RESET</span>
+        <button class="nav-btn" id="btnNextWeek" onclick="startNextWeek()">
+            <i data-lucide="calendar-plus"></i>
+            <span>NOWY TYDZIEŃ</span>
         </button>
 
         <button class="nav-btn" onclick="openExport()">
@@ -237,6 +239,6 @@
         </div>
     </div>
 
-    <script src="script.js?v=20261025-2"></script>
+    <script src="script.js?v=20261026-1"></script>
 </body>
 </html>

@@ -911,6 +911,70 @@ input[type="checkbox"] {
 .nav-btn:hover, .nav-btn.active { color: var(--gold); }
 .nav-btn.btn-danger-nav:hover { color: var(--danger); }
 .nav-btn i { width: 18px; height: 18px; }
+.nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.history-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding: 11px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(18, 18, 18, 0.92);
+}
+
+.history-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.history-heading strong {
+    color: var(--gold);
+    font-size: 10px;
+    letter-spacing: 0.8px;
+}
+
+.history-heading span {
+    color: var(--text-dim);
+    font-size: 10px;
+    text-align: right;
+}
+
+.history-tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+}
+
+.history-tab {
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #171717;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 750;
+    cursor: pointer;
+}
+
+.history-tab.active {
+    border-color: var(--border-gold);
+    background: rgba(212, 175, 55, 0.12);
+    color: var(--gold);
+}
+
+#btnNextWeek:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
 
 /* MODALE I PRZYCISKI */
 .modal {

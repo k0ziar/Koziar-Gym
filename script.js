@@ -32,7 +32,8 @@ var hiddenPlans = JSON.parse(localStorage.getItem('koziar_hidden_plans')) || [];
 var plans = JSON.parse(localStorage.getItem('koziar_plans')) || {};
 var currentPlan = localStorage.getItem('koziar_current_plan') || '';
 var checks = JSON.parse(localStorage.getItem('koziar_checks')) || {};
-var resetCheckPlans = JSON.parse(localStorage.getItem('koziar_reset_check_plans')) || [];
+var planHistory = JSON.parse(localStorage.getItem('koziar_plan_history')) || {};
+var historyView = null;
 var cloudSyncQueues = new Map();
 
 const CLASSIC_PLAN_NAMES = [
@@ -73,10 +74,36 @@ function saveAll() {
     }
     localStorage.setItem('koziar_current_plan', currentPlan);
     localStorage.setItem('koziar_checks', JSON.stringify(checks));
-    localStorage.setItem('koziar_reset_check_plans', JSON.stringify(resetCheckPlans));
+    localStorage.setItem('koziar_plan_history', JSON.stringify(planHistory));
     localStorage.setItem('koziar_hidden_plans', JSON.stringify(hiddenPlans));
 
     return syncPlanToCloud(currentPlan);
+}
+
+function clonePlanData(data) {
+    return JSON.parse(JSON.stringify(data || []));
+}
+
+function ensurePlanHistory(planName, plan = plans[planName]) {
+    if (!plan || isClassicPlan(planName)) return null;
+    let history = planHistory[planName];
+    if (!history || !Array.isArray(history.weeks)) {
+        history = { base: null, weeks: [], currentWeek: 1 };
+        planHistory[planName] = history;
+    }
+    if (!history.base) {
+        history.base = {
+            data: clonePlanData(plan.data),
+            notes: plan.notes || '',
+            savedAt: new Date().toISOString()
+        };
+    }
+    history.currentWeek = Math.max(1, Number(history.currentWeek) || 1);
+    return history;
+}
+
+function historyStorageKey(planName) {
+    return `${planName}-__archive__`;
 }
 
 function syncPlanToCloud(planName) {
@@ -95,6 +122,8 @@ function syncPlanToCloud(planName) {
         const planChecks = Object.fromEntries(
             Object.entries(checks).filter(([key]) => key.startsWith(planCheckPrefix))
         );
+        const planArchive = planHistory[planName];
+        if (planArchive) planChecks[historyStorageKey(planName)] = planArchive;
         const payload = {
             user_device_id: latestPlan.ownerDeviceId || deviceId,
             plan_name: planName,
@@ -159,6 +188,7 @@ async function loadPlansFromCloud() {
 
         if (data) {
             let loadedPlans = {};
+            const plansNeedingHistorySync = new Set();
 
             data.forEach(row => {
                 if (!hiddenPlans.includes(row.plan_name) || isAdmin) {
@@ -177,7 +207,17 @@ async function loadPlansFromCloud() {
                         const cloudChecks = Object.fromEntries(
                             Object.entries(row.checks).filter(([key]) => key.startsWith(planCheckPrefix))
                         );
+                        const archiveKey = historyStorageKey(row.plan_name);
+                        if (cloudChecks[archiveKey]) {
+                            planHistory[row.plan_name] = cloudChecks[archiveKey];
+                            delete cloudChecks[archiveKey];
+                        }
                         checks = { ...checks, ...cloudChecks };
+                    }
+                    const hadBasePlan = Boolean(planHistory[row.plan_name]?.base);
+                    ensurePlanHistory(row.plan_name, loadedPlans[row.plan_name]);
+                    if (!hadBasePlan && !isClassicPlan(row.plan_name)) {
+                        plansNeedingHistorySync.add(row.plan_name);
                     }
                 }
             });
@@ -197,12 +237,14 @@ async function loadPlansFromCloud() {
                 localStorage.setItem('koziar_plans', JSON.stringify(plans));
             }
             localStorage.setItem('koziar_checks', JSON.stringify(checks));
+            localStorage.setItem('koziar_plan_history', JSON.stringify(planHistory));
             
             const availableKeys = Object.keys(plans);
             if (availableKeys.length > 0 && (!currentPlan || !plans[currentPlan])) {
                 currentPlan = availableKeys[0];
             }
 
+            await Promise.all([...plansNeedingHistorySync].map(syncPlanToCloud));
             initPlanSelect();
             renderGymView();
         }
@@ -254,6 +296,7 @@ function deleteCurrentPlan() {
             localStorage.setItem('koziar_unlocked_keys', JSON.stringify(unlockedKeys));
         }
 
+        delete planHistory[currentPlan];
         delete plans[currentPlan];
         saveAll();
 
@@ -370,7 +413,9 @@ function importPlanData(suggestedName, notes, data) {
         const finalName = name.trim();
         if (plans[finalName] && !confirm(`Plan "${finalName}" już istnieje. Czy chcesz go zastąpić?`)) return;
         plans[finalName] = { isLocked: false, notes: notes || "", data: data || [], ownerDeviceId: deviceId };
+        delete planHistory[finalName];
         currentPlan = finalName;
+        historyView = null;
         saveAll();
         initPlanSelect();
         closeModals();
@@ -473,11 +518,13 @@ function initPlanSelect() {
 function loadPlan() {
     if (currentMode === 'edit') return;
     currentPlan = document.getElementById("planSelect").value;
+    historyView = null;
     saveAll();
     renderGymView();
 }
 
 function saveNotes() {
+    if (historyView) return;
     const el = document.getElementById("planNotes");
     if (el && plans[currentPlan] && (isAdmin || !isClassicPlan(currentPlan))) {
         plans[currentPlan].notes = el.value;
@@ -486,6 +533,10 @@ function saveNotes() {
 }
 
 function setMode(mode) {
+    if (mode === 'edit' && historyView) {
+        alert("Archiwum można tylko przeglądać. Wróć do bieżącego planu, aby go edytować.");
+        return;
+    }
     if (mode === 'edit' && !tempExcelData) {
         const plan = plans[currentPlan];
         if (!plan) return;
@@ -991,6 +1042,7 @@ function ensurePlanEditable() {
 }
 
 function updateCellDirectly(rowIndex, colIndex, value) {
+    if (historyView) return;
     ensurePlanEditable();
     plans[currentPlan].data[rowIndex][colIndex] = value;
     saveAll();
@@ -998,6 +1050,7 @@ function updateCellDirectly(rowIndex, colIndex, value) {
 }
 
 function updateSubSetCellDirectly(parentRowIndex, setIdx, headerName, value) {
+    if (historyView) return;
     ensurePlanEditable();
     const sheetData = plans[currentPlan].data;
     const parentRow = sheetData[parentRowIndex];
@@ -1031,9 +1084,8 @@ function updateSubSetCellDirectly(parentRowIndex, setIdx, headerName, value) {
 }
 
 function toggleCheck(key, target, value, totalSubSets = 0) {
+    if (historyView) return;
     if (!isAdmin && isClassicPlan(currentPlan)) return;
-
-    resetCheckPlans = resetCheckPlans.filter(name => name !== currentPlan);
 
     if (!checks[key]) checks[key] = {};
 
@@ -1058,6 +1110,38 @@ function toggleCheck(key, target, value, totalSubSets = 0) {
     renderGymView();
 }
 
+function selectHistoryEntry(entry) {
+    historyView = entry;
+    renderGymView();
+}
+
+function renderHistoryBar(history, isLockedClassic) {
+    const bar = document.getElementById('historyBar');
+    if (!bar) return;
+    if (!history || isLockedClassic) {
+        bar.innerHTML = '';
+        bar.style.display = 'none';
+        return;
+    }
+
+    const selectedEntry = historyView || 'current';
+    const button = (entry, label) => `
+        <button type="button" class="history-tab ${selectedEntry === entry ? 'active' : ''}"
+            aria-pressed="${selectedEntry === entry}" onclick="selectHistoryEntry('${entry}')">${label}</button>`;
+    bar.style.display = 'flex';
+    bar.innerHTML = `
+        <div class="history-heading">
+            <strong>HISTORIA PLANU</strong>
+            <span>${historyView ? 'Podgląd tylko do odczytu' : `Aktywny: tydzień ${history.currentWeek}`}</span>
+        </div>
+        <div class="history-tabs">
+            ${button('base', 'Plan bazowy')}
+            ${button('current', `Bieżący · T${history.currentWeek}`)}
+            ${history.weeks.map(week => button(`week:${week.week}`, `Tydzień ${week.week}`)).join('')}
+        </div>
+    `;
+}
+
 function renderGymView() {
     const p = plans[currentPlan];
     const overlay = document.getElementById("classicOverlayContainer");
@@ -1067,11 +1151,24 @@ function renderGymView() {
     if (!p) {
         if (gymView) gymView.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-dim);">Brak dostępnych planów. Pobieranie z bazy danych...</div>';
         if (overlay) overlay.style.display = "none";
+        const historyBar = document.getElementById('historyBar');
+        if (historyBar) historyBar.style.display = 'none';
         document.body.classList.remove("classic-preview-active");
         return;
     }
 
     const isLockedClassic = isClassicPlan(currentPlan) && !isAdmin;
+    const history = ensurePlanHistory(currentPlan, p);
+    const archiveEntry = historyView === 'base'
+        ? history?.base
+        : historyView?.startsWith('week:')
+            ? history?.weeks.find(week => week.week === Number(historyView.slice(5)))
+            : null;
+    if (historyView && !archiveEntry) historyView = null;
+    const isArchiveView = Boolean(historyView && archiveEntry);
+    const planData = archiveEntry?.data || p.data || [];
+    const viewChecks = isArchiveView ? (archiveEntry.checks || {}) : checks;
+    if (history) localStorage.setItem('koziar_plan_history', JSON.stringify(planHistory));
 
     if (isLockedClassic) {
         if (overlay) overlay.style.display = "flex";
@@ -1087,20 +1184,25 @@ function renderGymView() {
 
     const notesEl = document.getElementById("planNotes");
     if (notesEl) {
-        notesEl.value = p.notes || "";
-        notesEl.readOnly = isLockedClassic;
+        notesEl.value = archiveEntry?.notes ?? p.notes ?? "";
+        notesEl.readOnly = isLockedClassic || isArchiveView;
     }
 
     if (!gymView) return;
 
-    const { days, headers } = parseSheetToStructure();
+    renderHistoryBar(history, isLockedClassic);
+    const nextWeekButton = document.getElementById('btnNextWeek');
+    if (nextWeekButton) nextWeekButton.disabled = isLockedClassic || isArchiveView;
+    const editButton = document.getElementById('btnEditMode');
+    if (editButton) editButton.disabled = isArchiveView;
+    const { days, headers } = parseSheetToStructure(planData);
 
     const activeHeaders = currentMode === 'basic' 
         ? headers.filter(h => ['S','P','KG'].includes(h.name.toUpperCase())) 
         : headers;
 
-    const isReadOnlyAttr = isLockedClassic ? 'readonly' : '';
-    const isCheckDisabled = isLockedClassic ? 'disabled' : '';
+    const isReadOnlyAttr = isLockedClassic || isArchiveView ? 'readonly' : '';
+    const isCheckDisabled = isLockedClassic || isArchiveView ? 'disabled' : '';
 
     gymView.innerHTML = days.map((day, di) => {
         let hasAnyCheckedInDay = false;
@@ -1108,11 +1210,11 @@ function renderGymView() {
         if (!day.isRest) {
             day.exercises.forEach((ex, ei) => {
                 const key = `${currentPlan}-${di}-${ei}`;
-                if (checks[key]?.main) hasAnyCheckedInDay = true;
+                if (viewChecks[key]?.main) hasAnyCheckedInDay = true;
                 
                 const count = parseInt(ex.data['S']?.val || ex.data['s']?.val) || 1;
                 for (let s = 0; s < count; s++) {
-                    if (checks[key]?.[`sub_${s}`]) hasAnyCheckedInDay = true;
+                    if (viewChecks[key]?.[`sub_${s}`]) hasAnyCheckedInDay = true;
                 }
             });
         }
@@ -1140,14 +1242,14 @@ function renderGymView() {
 
                         const key = `${currentPlan}-${di}-${ei}`;
                         const isExpanded = expandedExercises[key];
-                        const mainChecked = checks[key]?.main || false;
+                        const mainChecked = viewChecks[key]?.main || false;
                         const count = parseInt(ex.data['S']?.val || ex.data['s']?.val) || 1;
 
                         return `
                             <div class="row-grid ${mainChecked ? 'done' : ''}">
                                 ${currentMode === 'pro' ? `
                                 <div class="col-cell expand-col">
-                                    <button class="btn-expand" onclick="toggleExpand(${inlineStringArgument(key)})">
+                                    <button class="btn-expand" ${isArchiveView ? 'disabled' : ''} onclick="toggleExpand(${inlineStringArgument(key)})">
                                         <i data-lucide="${isExpanded ? 'chevron-down' : 'chevron-right'}" style="width:14px"></i>
                                     </button>
                                 </div>` : ''}
@@ -1172,12 +1274,12 @@ function renderGymView() {
                             </div>
 
                             ${(isExpanded && currentMode === 'pro') ? Array.from({length: count}).map((_, s) => {
-                                const subChecked = checks[key]?.[`sub_${s}`] || false;
+                                const subChecked = viewChecks[key]?.[`sub_${s}`] || false;
                                 const subNr = `${ex.nr}.${s+1}`;
 
                                 let existingSubRow = null;
-                                for (let rowIndex = ex.rowIndex + 1; rowIndex < plans[currentPlan].data.length; rowIndex++) {
-                                    const row = plans[currentPlan].data[rowIndex];
+                                for (let rowIndex = ex.rowIndex + 1; rowIndex < planData.length; rowIndex++) {
+                                    const row = planData[rowIndex];
                                     if (!row) continue;
                                     const rowNr = String(row[0] || '');
                                     if (rowNr === subNr) {
@@ -1239,25 +1341,46 @@ function newPlan() {
                 ["1", "Wyciskanie leżąc", "3", "10", "60", "2", "90s"]
             ]
         };
+        delete planHistory[finalName];
         currentPlan = finalName;
+        historyView = null;
         saveAll();
         initPlanSelect();
         renderGymView();
     }
 }
 
-function resetWeek() {
+function startNextWeek() {
     if (currentMode === 'edit') return;
     if (!isAdmin && isClassicPlan(currentPlan)) return;
-    if (confirm("Resetować zaznaczone serie i podświetlenia?")) {
-        const planPrefix = `${currentPlan}-`;
-        if (!resetCheckPlans.includes(currentPlan)) resetCheckPlans.push(currentPlan);
-        Object.keys(checks).forEach(key => {
-            if (key.startsWith(planPrefix)) delete checks[key];
-        });
-        saveAll();
-        renderGymView();
-    }
+    if (historyView) return;
+    const plan = plans[currentPlan];
+    const history = ensurePlanHistory(currentPlan, plan);
+    if (!plan || !history) return alert("Nie wybrano własnego planu.");
+    if (!confirm(`Zapisać tydzień ${history.currentWeek} w archiwum i rozpocząć tydzień ${history.currentWeek + 1}?`)) return;
+
+    const planPrefix = `${currentPlan}-`;
+    const weekChecks = Object.fromEntries(
+        Object.entries(checks)
+            .filter(([key]) => key.startsWith(planPrefix))
+            .map(([key, value]) => [key, JSON.parse(JSON.stringify(value))])
+    );
+    history.weeks = history.weeks.filter(week => week.week !== history.currentWeek);
+    history.weeks.push({
+        week: history.currentWeek,
+        savedAt: new Date().toISOString(),
+        data: clonePlanData(plan.data),
+        notes: plan.notes || '',
+        checks: weekChecks
+    });
+    history.weeks.sort((left, right) => left.week - right.week);
+    history.currentWeek += 1;
+    Object.keys(checks).forEach(key => {
+        if (key.startsWith(planPrefix)) delete checks[key];
+    });
+    historyView = null;
+    saveAll();
+    renderGymView();
 }
 
 function formatExcelCell(val) {
