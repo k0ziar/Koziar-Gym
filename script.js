@@ -33,8 +33,12 @@ var plans = JSON.parse(localStorage.getItem('koziar_plans')) || {};
 var currentPlan = localStorage.getItem('koziar_current_plan') || '';
 var checks = JSON.parse(localStorage.getItem('koziar_checks')) || {};
 var planHistory = JSON.parse(localStorage.getItem('koziar_plan_history')) || {};
+var localPlanUpdates = JSON.parse(localStorage.getItem('koziar_local_plan_updates')) || {};
 var historyView = null;
 var cloudSyncQueues = new Map();
+var cloudLoadPromise = null;
+var cloudResumeTimer = null;
+var lastCloudRefreshAt = 0;
 
 const CLASSIC_PLAN_NAMES = [
     '3-dniowy FBW - by Koziar',
@@ -68,7 +72,7 @@ function inlineStringArgument(value) {
     return escapeHtml(JSON.stringify(String(value)));
 }
 
-function saveAll() {
+function saveAll(markPlanUpdated = true) {
     if (!isAdmin) {
         localStorage.setItem('koziar_plans', JSON.stringify(plans));
     }
@@ -76,6 +80,11 @@ function saveAll() {
     localStorage.setItem('koziar_checks', JSON.stringify(checks));
     localStorage.setItem('koziar_plan_history', JSON.stringify(planHistory));
     localStorage.setItem('koziar_hidden_plans', JSON.stringify(hiddenPlans));
+
+    if (markPlanUpdated && plans[currentPlan]) {
+        localPlanUpdates[currentPlan] = new Date().toISOString();
+        localStorage.setItem('koziar_local_plan_updates', JSON.stringify(localPlanUpdates));
+    }
 
     return syncPlanToCloud(currentPlan);
 }
@@ -118,6 +127,7 @@ function syncPlanToCloud(planName) {
         const latestPlan = plans[planName];
         if (!latestPlan || (isClassicPlan(planName) && !isAdmin)) return;
 
+        const localUpdatedAt = localPlanUpdates[planName];
         const planCheckPrefix = `${planName}-`;
         const planChecks = Object.fromEntries(
             Object.entries(checks).filter(([key]) => key.startsWith(planCheckPrefix))
@@ -137,7 +147,12 @@ function syncPlanToCloud(planName) {
         const { error } = await window.sbClient
             .from('user_plans')
             .upsert(payload, { onConflict: 'user_device_id, plan_name' });
-        if (error) console.warn("Nie udało się zapisać planu w chmurze:", error.message);
+        if (error) {
+            console.warn("Nie udało się zapisać planu w chmurze:", error.message);
+        } else if (localUpdatedAt && localPlanUpdates[planName] === localUpdatedAt) {
+            delete localPlanUpdates[planName];
+            localStorage.setItem('koziar_local_plan_updates', JSON.stringify(localPlanUpdates));
+        }
     }).catch(err => {
         console.warn("Brak połączenia z chmurą:", err);
     }).then(() => {
@@ -149,7 +164,18 @@ function syncPlanToCloud(planName) {
     return syncPromise;
 }
 
-async function loadPlansFromCloud() {
+function loadPlansFromCloud() {
+    if (!window.sbClient) return;
+    if (cloudLoadPromise) return cloudLoadPromise;
+
+    lastCloudRefreshAt = Date.now();
+    cloudLoadPromise = refreshPlansFromCloud().finally(() => {
+        cloudLoadPromise = null;
+    });
+    return cloudLoadPromise;
+}
+
+async function refreshPlansFromCloud() {
     if (!window.sbClient) return;
     try {
         let queries = [];
@@ -192,18 +218,33 @@ async function loadPlansFromCloud() {
 
             data.forEach(row => {
                 if (!hiddenPlans.includes(row.plan_name) || isAdmin) {
-                    loadedPlans[row.plan_name] = {
+                    const localPlan = plans[row.plan_name];
+                    const localUpdatedAt = Date.parse(localPlanUpdates[row.plan_name] || '');
+                    const cloudUpdatedAt = Date.parse(row.updated_at || '') || 0;
+                    const keepLocalPlan = Boolean(
+                        localPlan && localUpdatedAt && localUpdatedAt > cloudUpdatedAt
+                    );
+
+                    loadedPlans[row.plan_name] = keepLocalPlan ? localPlan : {
                         isLocked: isClassicPlan(row.plan_name),
                         notes: row.notes || "",
                         data: row.data || [],
                         accessKey: row.access_key,
                         ownerDeviceId: row.user_device_id
                     };
+                    if (keepLocalPlan) {
+                        plansNeedingHistorySync.add(row.plan_name);
+                    } else if (localUpdatedAt) {
+                        delete localPlanUpdates[row.plan_name];
+                    }
+
                     const planCheckPrefix = `${row.plan_name}-`;
-                    Object.keys(checks).forEach(key => {
-                        if (key.startsWith(planCheckPrefix)) delete checks[key];
-                    });
-                    if (row.checks) {
+                    if (!keepLocalPlan) {
+                        Object.keys(checks).forEach(key => {
+                            if (key.startsWith(planCheckPrefix)) delete checks[key];
+                        });
+                    }
+                    if (!keepLocalPlan && row.checks) {
                         const cloudChecks = Object.fromEntries(
                             Object.entries(row.checks).filter(([key]) => key.startsWith(planCheckPrefix))
                         );
@@ -238,15 +279,19 @@ async function loadPlansFromCloud() {
             }
             localStorage.setItem('koziar_checks', JSON.stringify(checks));
             localStorage.setItem('koziar_plan_history', JSON.stringify(planHistory));
+            localStorage.setItem('koziar_local_plan_updates', JSON.stringify(localPlanUpdates));
             
             const availableKeys = Object.keys(plans);
             if (availableKeys.length > 0 && (!currentPlan || !plans[currentPlan])) {
                 currentPlan = availableKeys[0];
             }
 
-            await Promise.all([...plansNeedingHistorySync].map(syncPlanToCloud));
             initPlanSelect();
             renderGymView();
+            Object.keys(localPlanUpdates).forEach(planName => {
+                if (plans[planName]) plansNeedingHistorySync.add(planName);
+            });
+            plansNeedingHistorySync.forEach(syncPlanToCloud);
         }
     } catch (err) {
         console.log("Błąd ładowania z chmury:", err);
@@ -297,8 +342,10 @@ function deleteCurrentPlan() {
         }
 
         delete planHistory[currentPlan];
+        delete localPlanUpdates[currentPlan];
         delete plans[currentPlan];
         saveAll();
+        localStorage.setItem('koziar_local_plan_updates', JSON.stringify(localPlanUpdates));
 
         currentPlan = Object.keys(plans)[0] || '';
         localStorage.setItem('koziar_current_plan', currentPlan);
@@ -519,7 +566,7 @@ function loadPlan() {
     if (currentMode === 'edit') return;
     currentPlan = document.getElementById("planSelect").value;
     historyView = null;
-    saveAll();
+    saveAll(false);
     renderGymView();
 }
 
@@ -1649,6 +1696,22 @@ function downloadTSV() {
 }
 
 function closeModals() { document.querySelectorAll(".modal").forEach(m => m.classList.remove("active")); }
+
+function scheduleCloudRefresh() {
+    if (document.visibilityState === 'hidden' || currentMode === 'edit') return;
+    if (Date.now() - lastCloudRefreshAt < 5000) return;
+
+    clearTimeout(cloudResumeTimer);
+    cloudResumeTimer = setTimeout(() => {
+        if (document.visibilityState !== 'hidden' && currentMode !== 'edit') {
+            loadPlansFromCloud();
+        }
+    }, 250);
+}
+
+document.addEventListener('visibilitychange', scheduleCloudRefresh);
+window.addEventListener('pageshow', scheduleCloudRefresh);
+window.addEventListener('focus', scheduleCloudRefresh);
 
 document.addEventListener("DOMContentLoaded", () => {
     initPlanSelect();
