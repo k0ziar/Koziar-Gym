@@ -127,7 +127,6 @@ function syncPlanToCloud(planName) {
         const latestPlan = plans[planName];
         if (!latestPlan || (isClassicPlan(planName) && !isAdmin)) return;
 
-        const localUpdatedAt = localPlanUpdates[planName];
         const planCheckPrefix = `${planName}-`;
         const planChecks = Object.fromEntries(
             Object.entries(checks).filter(([key]) => key.startsWith(planCheckPrefix))
@@ -149,9 +148,6 @@ function syncPlanToCloud(planName) {
             .upsert(payload, { onConflict: 'user_device_id, plan_name' });
         if (error) {
             console.warn("Nie udało się zapisać planu w chmurze:", error.message);
-        } else if (localUpdatedAt && localPlanUpdates[planName] === localUpdatedAt) {
-            delete localPlanUpdates[planName];
-            localStorage.setItem('koziar_local_plan_updates', JSON.stringify(localPlanUpdates));
         }
     }).catch(err => {
         console.warn("Brak połączenia z chmurą:", err);
@@ -234,7 +230,7 @@ async function refreshPlansFromCloud() {
                     };
                     if (keepLocalPlan) {
                         plansNeedingHistorySync.add(row.plan_name);
-                    } else if (localUpdatedAt) {
+                    } else if (localUpdatedAt && cloudUpdatedAt >= localUpdatedAt) {
                         delete localPlanUpdates[row.plan_name];
                     }
 
@@ -1697,9 +1693,33 @@ function downloadTSV() {
 
 function closeModals() { document.querySelectorAll(".modal").forEach(m => m.classList.remove("active")); }
 
+function restoreLocalState() {
+    if (isAdmin) return;
+
+    const storedPlans = localStorage.getItem('koziar_plans');
+    const storedChecks = localStorage.getItem('koziar_checks');
+    const storedHistory = localStorage.getItem('koziar_plan_history');
+    const storedUpdates = localStorage.getItem('koziar_local_plan_updates');
+
+    if (storedPlans) plans = JSON.parse(storedPlans);
+    if (storedChecks) checks = JSON.parse(storedChecks);
+    if (storedHistory) planHistory = JSON.parse(storedHistory);
+    if (storedUpdates) localPlanUpdates = JSON.parse(storedUpdates);
+
+    const storedCurrentPlan = localStorage.getItem('koziar_current_plan');
+    if (storedCurrentPlan && plans[storedCurrentPlan]) {
+        currentPlan = storedCurrentPlan;
+    }
+
+    initPlanSelect();
+    renderGymView();
+}
+
 function scheduleCloudRefresh() {
     if (document.visibilityState === 'hidden' || currentMode === 'edit') return;
-    if (Date.now() - lastCloudRefreshAt < 5000) return;
+
+    restoreLocalState();
+    if (Date.now() - lastCloudRefreshAt < 1000) return;
 
     clearTimeout(cloudResumeTimer);
     cloudResumeTimer = setTimeout(() => {
