@@ -55,6 +55,22 @@ header {
     gap: 10px;
 }
 
+.connection-status {
+    display: none;
+    padding: 8px 14px;
+    background: #211d10;
+    border-bottom: 1px solid var(--border-gold);
+    color: var(--gold-alt);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+    text-align: center;
+}
+
+.connection-status.visible {
+    display: block;
+}
+
 .brand-logo {
     display: flex;
     align-items: center;

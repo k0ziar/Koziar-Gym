@@ -39,6 +39,32 @@ var cloudSyncQueues = new Map();
 var cloudLoadPromise = null;
 var cloudResumeTimer = null;
 var lastCloudRefreshAt = 0;
+var cloudConnectionState = navigator.onLine ? 'checking' : 'offline';
+
+function updateCloudStatus() {
+    const status = document.getElementById('connectionStatus');
+    if (!status) return;
+
+    if (!navigator.onLine) {
+        status.textContent = 'Brak internetu — plan i wyniki zapisują się na tym urządzeniu.';
+    } else if (!window.sbClient) {
+        status.textContent = 'Tryb lokalny — zmiany zapisują się na tym urządzeniu.';
+    } else if (cloudConnectionState === 'checking') {
+        status.textContent = 'Łączenie z bazą — zmiany są bezpiecznie zapisywane lokalnie.';
+    } else if (cloudConnectionState === 'unavailable') {
+        status.textContent = 'Brak połączenia z bazą — zmiany zostaną zsynchronizowane po odzyskaniu połączenia.';
+    } else {
+        status.classList.remove('visible');
+        return;
+    }
+
+    status.classList.add('visible');
+}
+
+function setCloudConnectionState(state) {
+    cloudConnectionState = state;
+    updateCloudStatus();
+}
 
 const CLASSIC_PLAN_NAMES = [
     '3-dniowy FBW - by Koziar',
@@ -116,7 +142,12 @@ function historyStorageKey(planName) {
 }
 
 function syncPlanToCloud(planName) {
-    if (!window.sbClient || !planName) return Promise.resolve();
+    if (
+        !window.sbClient ||
+        !planName ||
+        !navigator.onLine ||
+        cloudConnectionState !== 'connected'
+    ) return Promise.resolve();
     const p = plans[planName];
     if (!p || (isClassicPlan(planName) && !isAdmin)) return Promise.resolve();
 
@@ -147,9 +178,13 @@ function syncPlanToCloud(planName) {
             .from('user_plans')
             .upsert(payload, { onConflict: 'user_device_id, plan_name' });
         if (error) {
+            setCloudConnectionState('unavailable');
             console.warn("Nie udało się zapisać planu w chmurze:", error.message);
+        } else {
+            setCloudConnectionState('connected');
         }
     }).catch(err => {
+        setCloudConnectionState('unavailable');
         console.warn("Brak połączenia z chmurą:", err);
     }).then(() => {
         if (cloudSyncQueues.get(queueKey) === syncPromise) {
@@ -161,7 +196,14 @@ function syncPlanToCloud(planName) {
 }
 
 function loadPlansFromCloud() {
-    if (!window.sbClient) return;
+    if (!window.sbClient) {
+        updateCloudStatus();
+        return Promise.resolve();
+    }
+    if (!navigator.onLine) {
+        setCloudConnectionState('offline');
+        return Promise.resolve();
+    }
     if (cloudLoadPromise) return cloudLoadPromise;
 
     lastCloudRefreshAt = Date.now();
@@ -197,9 +239,11 @@ async function refreshPlansFromCloud() {
         const results = await Promise.all(queries);
         const failedResult = results.find(result => result.error);
         if (failedResult) {
+            setCloudConnectionState('unavailable');
             console.warn("Nie udało się pobrać planów z chmury:", failedResult.error.message);
             return;
         }
+        setCloudConnectionState('connected');
         const rowsById = new Map();
         results.forEach(result => {
             (result.data || []).forEach(row => {
@@ -290,6 +334,7 @@ async function refreshPlansFromCloud() {
             plansNeedingHistorySync.forEach(syncPlanToCloud);
         }
     } catch (err) {
+        setCloudConnectionState('unavailable');
         console.log("Błąd ładowania z chmury:", err);
     }
 }
@@ -680,6 +725,10 @@ function initExcel() {
 
     if (!plans[currentPlan]) return;
     if (!tempExcelData) tempExcelData = [];
+    if (typeof Handsontable === 'undefined') {
+        alert('Arkusz Excel jest niedostępny. Połącz się z internetem i odśwież aplikację, aby pobrać bibliotekę.');
+        return;
+    }
 
     hotInstance = new Handsontable(container, {
         data: tempExcelData,
@@ -1522,6 +1571,10 @@ function handleFileSelect(e) {
     const fileName = file.name.toLowerCase();
 
     if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        if (typeof XLSX === 'undefined') {
+            alert('Import plików Excel jest niedostępny. Połącz się z internetem i odśwież aplikację, aby pobrać bibliotekę.');
+            return;
+        }
         const reader = new FileReader();
         reader.onload = (ev) => {
             try {
@@ -1732,9 +1785,20 @@ function scheduleCloudRefresh() {
 document.addEventListener('visibilitychange', scheduleCloudRefresh);
 window.addEventListener('pageshow', scheduleCloudRefresh);
 window.addEventListener('focus', scheduleCloudRefresh);
+window.addEventListener('offline', () => setCloudConnectionState('offline'));
+window.addEventListener('online', () => {
+    setCloudConnectionState('checking');
+    loadPlansFromCloud();
+});
 
 document.addEventListener("DOMContentLoaded", () => {
+    updateCloudStatus();
     initPlanSelect();
     renderGymView();
     loadPlansFromCloud();
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./service-worker.js')
+            .catch(error => console.warn('Nie udało się włączyć trybu offline:', error));
+    }
 });
